@@ -1,9 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Dimensions,
+    StatusBar as NativeStatusBar,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -11,10 +12,11 @@ import {
     Text,
     TouchableOpacity,
     View,
-    StatusBar as NativeStatusBar,
 } from 'react-native';
 import EmployeeBottomTabBar from '../components/EmployeeBottomTabBar';
+import { LeaveModal } from '../components/LeaveModal';
 import { useTheme } from '../contexts/ThemeContext';
+import { fetchLeaveRequests } from '../services/leave';
 
 const { width } = Dimensions.get('window');
 
@@ -26,42 +28,7 @@ const LEAVE_BALANCE = [
 ];
 
 // Mock recent applications
-const RECENT_APPLICATIONS = [
-    {
-        id: 1,
-        month: 'Oct',
-        day: '12',
-        type: 'Sick Leave',
-        details: '1 Day • Flu',
-        status: 'Pending',
-        statusColor: '#f59e0b',
-        bgColor: '#fef3c7',
-        iconColor: '#f59e0b',
-    },
-    {
-        id: 2,
-        month: 'Sep',
-        day: '04',
-        type: 'Annual Leave',
-        details: '2 Days • Vacation',
-        status: 'Approved',
-        statusColor: '#10b981',
-        bgColor: '#d1fae5',
-        iconColor: '#10b981',
-    },
-    {
-        id: 3,
-        month: 'Aug',
-        day: '15',
-        type: 'Casual Leave',
-        details: '1 Day • Personal',
-        status: 'Rejected',
-        statusColor: '#ef4444',
-        bgColor: '#fee2e2',
-        iconColor: '#ef4444',
-        opacity: 0.8,
-    },
-];
+
 
 // Mock leave data - in real app, this would come from API
 // Format: 'YYYY-MM-DD': 'status'
@@ -71,7 +38,8 @@ const getMockLeaveData = (year: number, month: number): { [key: string]: string 
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth();
     const currentDate = today.getDate();
-    
+
+
     // Only add mock data for current month for demo purposes
     if (year === currentYear && month === currentMonth) {
         return {
@@ -81,7 +49,7 @@ const getMockLeaveData = (year: number, month: number): { [key: string]: string 
             [`${year}-${monthStr}-${String(Math.min(currentDate + 8, 28)).padStart(2, '0')}`]: 'holiday',
         };
     }
-    
+
     // For other months, you can add sample data
     // For example, for January 2024:
     if (year === 2024 && month === 0) {
@@ -92,7 +60,7 @@ const getMockLeaveData = (year: number, month: number): { [key: string]: string 
             '2024-01-15': 'holiday',
         };
     }
-    
+
     return {};
 };
 
@@ -111,6 +79,16 @@ export default function EmployeeLeavesScreen() {
     const { isDark, colors } = useTheme();
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const today = getTodayDate();
+
+    const [recentApplications, setRecentApplications] = useState<any[]>([]);
+    const [isLeaveModalVisible, setLeaveModalVisible] = useState(false);
+    const [showAllApplications, setShowAllApplications] = useState(false);
+
+    useEffect(() => {
+        fetchLeaveRequests().then((applications) => {
+            setRecentApplications(applications);
+        });
+    }, []);
 
     const dynamicStyles = createDynamicStyles(colors, isDark);
 
@@ -134,48 +112,48 @@ export default function EmployeeLeavesScreen() {
     const generateCalendarDays = () => {
         const year = currentMonth.getFullYear();
         const month = currentMonth.getMonth();
-        
+
         // Get first day of the month
         const firstDay = new Date(year, month, 1);
         const firstDayOfWeek = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
-        
+
         // Get number of days in the month
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
+
         // Get mock leave data for this month
         const mockLeaveData = getMockLeaveData(year, month);
-        
+
         // Create array for calendar
         const calendarDays: Array<{ day: number | null; status: string }> = [];
-        
+
         // Add empty slots for days before the first day of the month
         // If first day is Sunday (0), no empty slots needed
         // If first day is Monday (1), add 1 empty slot for Sunday, etc.
         for (let i = 0; i < firstDayOfWeek; i++) {
             calendarDays.push({ day: null, status: 'empty' });
         }
-        
+
         // Add all days of the month
         for (let day = 1; day <= daysInMonth; day++) {
             const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            
+
             // Check if it's today
-            const isToday = 
-                year === today.year && 
-                month === today.month && 
+            const isToday =
+                year === today.year &&
+                month === today.month &&
                 day === today.date;
-            
+
             // Get status from mock data or default to 'normal'
             let status = mockLeaveData[dateKey] || 'normal';
-            
+
             // Override with 'today' if it's today
             if (isToday) {
                 status = 'today';
             }
-            
+
             calendarDays.push({ day, status });
         }
-        
+
         // Ensure we have a complete grid (multiple of 7 for proper alignment)
         // Add empty slots at the end if needed to complete the last row
         const totalSlots = calendarDays.length;
@@ -186,7 +164,7 @@ export default function EmployeeLeavesScreen() {
                 calendarDays.push({ day: null, status: 'empty' });
             }
         }
-        
+
         return calendarDays;
     };
 
@@ -195,14 +173,14 @@ export default function EmployeeLeavesScreen() {
     const getDayStatusStyle = (status: string) => {
         switch (status) {
             case 'approved':
-                return { 
-                    backgroundColor: '#10b981', 
+                return {
+                    backgroundColor: '#10b981',
                     color: '#ffffff',
                     borderRadius: 20,
                 };
             case 'pending':
-                return { 
-                    backgroundColor: '#fbbf24', 
+                return {
+                    backgroundColor: '#fbbf24',
                     color: '#000000',
                     borderRadius: 20,
                 };
@@ -221,8 +199,8 @@ export default function EmployeeLeavesScreen() {
                     borderRadius: 20,
                 };
             default:
-                return { 
-                    backgroundColor: 'transparent', 
+                return {
+                    backgroundColor: 'transparent',
                     color: isDark ? '#e5e7eb' : '#111827',
                     borderRadius: 20,
                 };
@@ -251,7 +229,7 @@ export default function EmployeeLeavesScreen() {
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Leave Balance Section */}
-                    <View style={styles.balanceSection}>
+                    {/* <View style={styles.balanceSection}>
                         <View style={styles.sectionHeader}>
                             <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Leave Balance</Text>
                             <TouchableOpacity>
@@ -293,15 +271,16 @@ export default function EmployeeLeavesScreen() {
                                     </View>
                                 </View>
                             ))}
+
                         </ScrollView>
-                    </View>
+                    </View> */}
 
                     {/* Calendar Section */}
-                    <View style={styles.calendarSection}>
+                    {/* <View style={styles.calendarSection}>
                         <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Leave Calendar</Text>
-                        <View style={[styles.calendarCard, dynamicStyles.calendarCard]}>
-                            {/* Month Navigator */}
-                            <View style={styles.monthNavigator}>
+                        <View style={[styles.calendarCard, dynamicStyles.calendarCard]}> */}
+                    {/* Month Navigator */}
+                    {/* <View style={styles.monthNavigator}>
                                 <TouchableOpacity
                                     style={[styles.navButton, dynamicStyles.navButton]}
                                     onPress={handlePreviousMonth}
@@ -315,33 +294,32 @@ export default function EmployeeLeavesScreen() {
                                 >
                                     <MaterialIcons name="chevron-right" size={20} color={colors.textSub} />
                                 </TouchableOpacity>
-                            </View>
+                            </View> */}
 
-                            {/* Days Header */}
-                            <View style={styles.daysHeader}>
+                    {/* Days Header */}
+                    {/* <View style={styles.daysHeader}>
                                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
                                     <Text key={index} style={[styles.dayHeader, dynamicStyles.dayHeader]}>
                                         {day}
                                     </Text>
                                 ))}
-                            </View>
+                            </View> */}
 
-                            {/* Calendar Grid */}
-                            <View style={styles.calendarGrid}>
-                                {/* Days */}
-                                {calendarDays.map((item, index) => {
+                    {/* Calendar Grid */}
+                    {/* <View style={styles.calendarGrid}> */}
+                    {/* Days */}
+                    {/* {calendarDays.map((item, index) => {
                                     // Render empty slot
                                     if (item.day === null) {
                                         return (
-                                            <View 
-                                                key={`empty-${index}`} 
+                                            <View
+                                                key={`empty-${index}`}
                                                 style={styles.calendarDayEmpty}
                                             />
                                         );
-                                    }
-                                    
-                                    // Render actual date
-                                    const dayStyle = getDayStatusStyle(item.status);
+                                    } */}
+
+                    {/* const dayStyle = getDayStatusStyle(item.status);
                                     const isHighlighted = item.status === 'approved' || item.status === 'pending' || item.status === 'holiday' || item.status === 'today';
                                     return (
                                         <TouchableOpacity
@@ -358,7 +336,7 @@ export default function EmployeeLeavesScreen() {
                                             <Text
                                                 style={[
                                                     styles.calendarDayText,
-                                                    { 
+                                                    {
                                                         color: dayStyle.color || (isDark ? '#e5e7eb' : '#111827'),
                                                         fontWeight: isHighlighted ? '700' : '500',
                                                     },
@@ -369,10 +347,10 @@ export default function EmployeeLeavesScreen() {
                                         </TouchableOpacity>
                                     );
                                 })}
-                            </View>
+                            </View> */}
 
-                            {/* Legend */}
-                            <View style={styles.legend}>
+                    {/* Legend */}
+                    {/* <View style={styles.legend}>
                                 <View style={styles.legendItem}>
                                     <View style={[styles.legendDot, { backgroundColor: STATIC_COLORS.emerald }]} />
                                     <Text style={[styles.legendText, dynamicStyles.legendText]}>Approved</Text>
@@ -385,17 +363,26 @@ export default function EmployeeLeavesScreen() {
                                     <View style={[styles.legendDot, { backgroundColor: isDark ? '#374151' : '#cbd5e1' }]} />
                                     <Text style={[styles.legendText, dynamicStyles.legendText]}>Holiday</Text>
                                 </View>
-                            </View>
-                        </View>
-                    </View>
+                            </View> */}
+                    {/* </View>
+                    </View> */}
 
                     {/* Recent Applications */}
                     <View style={styles.applicationsSection}>
-                        <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Recent Applications</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Recent Applications</Text>
+                            {recentApplications.length > 3 && (
+                                <TouchableOpacity onPress={() => setShowAllApplications(!showAllApplications)}>
+                                    <Text style={{ color: colors.primary, fontWeight: '700' }}>
+                                        {showAllApplications ? 'Show Less' : 'View All'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                         <View style={styles.applicationsList}>
-                            {RECENT_APPLICATIONS.map((app) => (
+                            {(showAllApplications ? recentApplications : recentApplications.slice(0, 3)).map((app) => (
                                 <View
-                                    key={app.id}
+                                    key={app.leaveId}
                                     style={[
                                         styles.applicationCard,
                                         dynamicStyles.applicationCard,
@@ -415,6 +402,9 @@ export default function EmployeeLeavesScreen() {
                                         <View style={styles.applicationInfo}>
                                             <Text style={[styles.applicationType, dynamicStyles.applicationType]}>{app.type}</Text>
                                             <Text style={[styles.applicationDetails, dynamicStyles.applicationDetails]}>{app.details}</Text>
+                                            <Text style={[styles.applicationDates, dynamicStyles.applicationDetails]}>
+                                                {app.startDate} - {app.endDate}
+                                            </Text>
                                         </View>
                                     </View>
                                     <View style={[styles.statusBadge, { backgroundColor: `${app.statusColor}20` }]}>
@@ -423,6 +413,8 @@ export default function EmployeeLeavesScreen() {
                                 </View>
                             ))}
                         </View>
+
+
                     </View>
 
                     <View style={{ height: 100 }} />
@@ -431,13 +423,38 @@ export default function EmployeeLeavesScreen() {
                 {/* Floating Action Button */}
                 <TouchableOpacity
                     style={[styles.fab, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-                    onPress={() => router.push('/screens/apply_leave')}
+                    onPress={() => setLeaveModalVisible(true)}
                 >
                     <MaterialIcons name="add" size={32} color="#ffffff" />
                 </TouchableOpacity>
 
                 {/* Employee Bottom Tab Bar */}
                 <EmployeeBottomTabBar activeTab="leaves" />
+                <LeaveModal
+                    visible={isLeaveModalVisible}
+                    onClose={() => setLeaveModalVisible(false)}
+                    onSubmit={(newLeave) => {
+                        const start = newLeave.startDate ? new Date(newLeave.startDate) : new Date();
+                        const end = newLeave.endDate ? new Date(newLeave.endDate) : start;
+
+                        // Calculate total days (inclusive)
+                        const timeDiff = end.getTime() - start.getTime();
+                        const dayCount = Math.floor(timeDiff / (1000 * 3600 * 24)) + 1;
+
+                        const formattedLeave = {
+                            leaveId: newLeave.leaveId,
+                            month: start.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
+                            day: start.getDate(),
+                            type: newLeave.leaveType || 'Leave',
+                            details: `${dayCount} Day${dayCount > 1 ? 's' : ''} • ${newLeave.reason || ''}`,
+                            status: newLeave.status,
+                            statusColor: '#fbbf24',
+                            iconColor: '#fbbf24',
+                        };
+
+                        setRecentApplications((prev) => [formattedLeave, ...prev]);
+                    }}
+                />
             </SafeAreaView>
         </View>
     );
@@ -745,6 +762,13 @@ const styles = StyleSheet.create({
     applicationDetails: {
         fontSize: 12,
     },
+
+    applicationDates: {
+        fontSize: 11,
+        color: '#94a3b8',
+        marginTop: 2,
+    },
+
     statusBadge: {
         paddingHorizontal: 12,
         paddingVertical: 4,

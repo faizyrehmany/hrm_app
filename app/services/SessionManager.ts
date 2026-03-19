@@ -2,11 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface User {
     id: number | string;
-    username: string;
-    email: string;
-    // Add other user fields as needed based on your API response
+    employeeId?: number;
+    enrollNo?: string;   // 🔥 ADD THIS
+    username?: string;
+    email?: string;
     fullName?: string;
-    roles?: string[];
+    role?: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    departmentName?: string; // 🔥 ADD THIS
 }
 
 export interface Session {

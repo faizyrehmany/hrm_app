@@ -47,8 +47,8 @@ export default function DashboardScreen() {
     useEffect(() => {
         const checkRole = async () => {
             const user = await SessionManager.getUser();
-            const roles = user?.roles || [];
-            const isAdmin = roles.some((role: string) => role.toLowerCase() === 'admin');
+            const role = user?.role || '';
+            const isAdmin = role.toLowerCase() === 'admin';
 
             // Redirect employees to employee dashboard
             if (!isAdmin) {

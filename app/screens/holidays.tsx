@@ -76,6 +76,7 @@ export default function HolidaysScreen() {
     const [rawHolidays, setRawHolidays] = useState<any[]>([]);
     const [nextHoliday, setNextHoliday] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [debouncedQuery, setDebouncedQuery] = useState('');
 
     // Search State
     const [isSearchActive, setIsSearchActive] = useState(false);
@@ -134,14 +135,14 @@ export default function HolidaysScreen() {
             filteredHolidays.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         }
 
-        // Apply Search Filter
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase().trim();
-            filteredHolidays = filteredHolidays.filter(h =>
+        // Apply Search Filter (search affects displayed list)
+        const query = searchQuery.toLowerCase().trim();
+        const filteredHolidaysByQuery = query
+            ? filteredHolidays.filter(h =>
                 h.title.toLowerCase().includes(query) ||
                 (h.description && h.description.toLowerCase().includes(query))
-            );
-        }
+            )
+            : filteredHolidays;
 
         // Find next holiday (closest upcoming one) - independent of search to always show next
         // But dependent on the raw 'Upcoming' list
@@ -171,16 +172,15 @@ export default function HolidaysScreen() {
         }
 
         // Group by Month
+
+        // Group by Month
         const grouped: any = {};
-        filteredHolidays.forEach(item => {
+        filteredHolidaysByQuery.forEach(item => {
             const d = new Date(item.date);
             const key = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
             if (!grouped[key]) {
-                grouped[key] = {
-                    month: key,
-                    holidays: []
-                };
+                grouped[key] = { month: key, holidays: [] };
             }
 
             grouped[key].holidays.push({

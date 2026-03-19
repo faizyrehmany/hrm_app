@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Image,
-    SafeAreaView,
+
     ScrollView,
     StyleSheet,
     Switch,
@@ -11,9 +11,11 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SessionManager, User } from '../services/SessionManager';
-import { useTheme } from '../contexts/ThemeContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import EmployeeBottomTabBar from '../components/EmployeeBottomTabBar';
+import { useTheme } from '../contexts/ThemeContext';
+import { SessionManager, User } from '../services/SessionManager';
+
 
 export default function EmployeeProfileScreen() {
     const router = useRouter();
@@ -90,7 +92,7 @@ export default function EmployeeProfileScreen() {
                         Personal Information
                     </Text>
                     <View style={[styles.card, dynamicStyles.card]}>
-                        <TouchableOpacity style={[styles.menuItem, styles.menuItemBorder]}>
+                        <TouchableOpacity style={[styles.menuItem, styles.menuItemBorder]} onPress={() => router.push('/screens/profile_screen')}>
                             <View style={styles.menuItemLeft}>
                                 <View style={[styles.iconContainer, { backgroundColor: colors.primary + '1A' }]}>
                                     <MaterialIcons name="person" size={20} color={colors.primary} />
@@ -102,7 +104,7 @@ export default function EmployeeProfileScreen() {
                             <MaterialIcons name="chevron-right" size={24} color={colors.textSub} />
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.menuItem}>
+                        {/* <TouchableOpacity style={styles.menuItem}>
                             <View style={styles.menuItemLeft}>
                                 <View style={[styles.iconContainer, { backgroundColor: colors.primary + '1A' }]}>
                                     <MaterialIcons name="work" size={20} color={colors.primary} />
@@ -112,29 +114,32 @@ export default function EmployeeProfileScreen() {
                                 </Text>
                             </View>
                             <MaterialIcons name="chevron-right" size={24} color={colors.textSub} />
-                        </TouchableOpacity>
+                        </TouchableOpacity> */}
                     </View>
                 </View>
 
                 {/* Security */}
                 <View style={styles.section}>
                     <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>
-                        Security
+                        System Information
                     </Text>
                     <View style={[styles.card, dynamicStyles.card]}>
-                        <TouchableOpacity style={[styles.menuItem, styles.menuItemBorder]}>
+                        <TouchableOpacity
+                            style={[styles.menuItem, styles.menuItemBorder]}
+                            onPress={() => router.push('/screens/SystemDetailsScreen')} // <-- navigation added
+                        >
                             <View style={styles.menuItemLeft}>
                                 <View style={[styles.iconContainer, { backgroundColor: colors.primary + '1A' }]}>
                                     <MaterialIcons name="lock" size={20} color={colors.primary} />
                                 </View>
                                 <Text style={[styles.menuItemText, dynamicStyles.menuItemText]}>
-                                    Change Password
+                                    System Details
                                 </Text>
                             </View>
                             <MaterialIcons name="chevron-right" size={24} color={colors.textSub} />
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.menuItem}>
+                        {/* <TouchableOpacity style={styles.menuItem}>
                             <View style={styles.menuItemLeft}>
                                 <View style={[styles.iconContainer, { backgroundColor: colors.primary + '1A' }]}>
                                     <MaterialIcons name="shield" size={20} color={colors.primary} />
@@ -144,7 +149,7 @@ export default function EmployeeProfileScreen() {
                                 </Text>
                             </View>
                             <MaterialIcons name="chevron-right" size={24} color={colors.textSub} />
-                        </TouchableOpacity>
+                        </TouchableOpacity> */}
                     </View>
                 </View>
 
@@ -154,7 +159,7 @@ export default function EmployeeProfileScreen() {
                         App Preferences
                     </Text>
                     <View style={[styles.card, dynamicStyles.card]}>
-                        <TouchableOpacity style={[styles.menuItem, styles.menuItemBorder]}>
+                        {/* <TouchableOpacity style={[styles.menuItem, styles.menuItemBorder]}>
                             <View style={styles.menuItemLeft}>
                                 <View style={[styles.iconContainer, { backgroundColor: colors.primary + '1A' }]}>
                                     <MaterialIcons name="notifications" size={20} color={colors.primary} />
@@ -164,7 +169,7 @@ export default function EmployeeProfileScreen() {
                                 </Text>
                             </View>
                             <MaterialIcons name="chevron-right" size={24} color={colors.textSub} />
-                        </TouchableOpacity>
+                        </TouchableOpacity> */}
 
                         <View style={styles.menuItem}>
                             <View style={styles.menuItemLeft}>

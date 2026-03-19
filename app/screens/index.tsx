@@ -24,8 +24,10 @@ import { loginUser } from '../services/auth'; // Changed from require to import
 
 const { width, height } = Dimensions.get('window');
 
+import { jwtDecode } from "jwt-decode";
 import { CustomToast } from '../components/CustomToast';
 import SplashScreen from '../components/SplashScreen';
+import { SessionManager } from '../services/SessionManager';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -154,72 +156,116 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={styles.forgotPassword}>
+              <TouchableOpacity
+                style={styles.forgotPassword}
+                onPress={() => router.push('/screens/forgot_password')}
+              >
                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
               </TouchableOpacity>
 
               {/* Login Button */}
               <TouchableOpacity
                 style={styles.loginButtonContainer}
+                disabled={isLoading}
                 onPress={async () => {
                   if (isLoading) return;
+
                   if (!email || !password) {
                     triggerToast("Please enter email and password");
                     return;
                   }
 
                   setIsLoading(true);
-                  try {
-                    const result = await loginUser(email, password);
-                    if (result.success) {
-                      // Check user role and redirect accordingly
-                      const roles = result.roles || result.data?.roles || [];
-                      const isAdmin = roles.some((role: string) => role.toLowerCase() === 'admin');
 
-                      if (isAdmin) {
-                        router.push('/screens/dashboard');
+                  try {
+                    const result = await loginUser(email.trim(), password);
+
+                    if (result?.success && result?.data?.accessToken) {
+                      const token = result.data.accessToken;
+
+                      // 🔥 Decode JWT to extract enrollNo
+                      let enrollNo = "";
+                      try {
+                        const decoded: any = jwtDecode(token);
+                        enrollNo = decoded?.unique_name || "";
+                        console.log("Decoded enrollNo:", enrollNo);
+                      } catch (err) {
+                        console.log("Token decode failed:", err);
+                      }
+
+                      const userRole = result.data?.role || "Employee";
+
+                      // ✅ Save everything in session
+                      await SessionManager.saveSession(
+                        {
+                          ...result.data,
+                          id: result.data.employeeId,
+                          employeeId: result.data.employeeId,
+                          role: userRole,
+                          enrollNo: enrollNo, // 🔥 Save enrollNo for attendance
+                          departmentName: result.data?.departmentName || null,
+                        },
+                        token
+                      );
+
+                      console.log("Session saved successfully");
+
+                      // ✅ Redirect based on role
+                      if (userRole.toLowerCase() === "admin") {
+                        console.log("Admin logged in");
+                        router.replace("/screens/dashboard");
                       } else {
-                        router.push('/screens/employee_dashboard');
+                        console.log("Employee logged in");
+                        router.replace("/screens/employee_dashboard");
                       }
                     } else {
-                      // Check if it's an invalid credentials error
-                      let msg = '';
-                      if (typeof result.data === 'string') {
+                      // ❌ Handle login failure
+                      let msg = "";
+
+                      if (typeof result?.data === "string") {
                         msg = result.data;
-                      } else if (result.data?.message) {
+                      } else if (result?.data?.message) {
                         msg = result.data.message;
-                      } else if (result.error) {
+                      } else if (result?.error) {
                         msg = JSON.stringify(result.error);
                       } else {
-                        msg = 'Unknown error';
+                        msg = "Login failed";
                       }
 
-                      if (msg && typeof msg === 'string' && (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credential'))) {
+                      if (
+                        msg.toLowerCase().includes("invalid") ||
+                        msg.toLowerCase().includes("credential")
+                      ) {
                         triggerToast("Invalid Credentials");
                       } else {
-                        triggerToast('Login Failed: ' + msg);
+                        triggerToast(msg);
                       }
                     }
-                  } catch (e) {
-                    triggerToast('Error: ' + e);
+                  } catch (error: any) {
+                    console.log("Login error:", error);
+                    triggerToast("Something went wrong. Please try again.");
                   } finally {
                     setIsLoading(false);
                   }
                 }}
-                disabled={isLoading}
               >
                 <LinearGradient
-                  colors={['#1e3a8a', '#172554']}
+                  colors={["#1e3a8a", "#172554"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.loginButton}
                 >
                   {isLoading ? (
-                    <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                    <ActivityIndicator size="small" color="#ffffff" />
                   ) : (
                     <>
                       <Text style={styles.loginButtonText}>Log In</Text>
-                      <Ionicons name="arrow-forward" size={20} color="#fff" style={styles.loginButtonIcon} />
+                      <Ionicons
+                        name="arrow-forward"
+                        size={20}
+                        color="#fff"
+                        style={styles.loginButtonIcon}
+                      />
                     </>
                   )}
                 </LinearGradient>

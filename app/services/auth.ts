@@ -1,4 +1,4 @@
-import { SessionManager } from './SessionManager';
+import { SessionManager, User } from './SessionManager';
 
 import { API_BASE_URL } from './Config';
 
@@ -91,3 +91,70 @@ export const registerUser = async (userData: RegisterData) => {
         return { success: false, error };
     }
 };
+
+
+
+
+
+export const EmployeeApi = {
+    // Fetch employee details dynamically using employeeId from session
+    getEmployeeDetails: async (): Promise<User | null> => {
+      try {
+        const user = await SessionManager.getUser();
+        const token = await SessionManager.getToken();
+  
+        if (!user || !user.employeeId) {
+          console.log('No employeeId in session');
+          return null;
+        }
+  
+        const response = await fetch(`${API_BASE_URL}/employees/${user.employeeId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+  
+        if (!response.ok) {
+          const text = await response.text();
+          console.error('API Error:', text);
+          return null;
+        }
+  
+        const data: User = await response.json();
+        return data;
+      } catch (error) {
+        console.error('Failed to fetch employee details:', error);
+        return null;
+      }
+    },
+  
+    // Create or update employee details
+    postEmployeeDetails: async (employeeData: any): Promise<boolean> => {
+        try {
+          const user = await SessionManager.getUser();
+          const token = await SessionManager.getToken();
+      
+          const response = await fetch(`${API_BASE_URL}/employees/${user?.employeeId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(employeeData),
+          });
+      
+          const text = await response.text();
+      
+          if (!response.ok) {
+            console.error('API Status:', response.status);
+            console.error('API Response:', text);
+            return false;
+          }
+      
+          return true;
+        } catch (error) {
+          console.error('Update Employee Error:', error);
+          return false;
+        }
+      }
+  };

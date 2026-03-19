@@ -1,5 +1,4 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
@@ -15,6 +14,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import AttendanceTable from '../components/AttendanceTable';
 import EmployeeBottomTabBar from '../components/EmployeeBottomTabBar';
 import { useTheme } from '../contexts/ThemeContext';
 import { AttendanceManager, SessionManager, User } from '../services/SessionManager';
@@ -85,6 +85,7 @@ export default function AttendanceScreen() {
     const [checkInTime, setCheckInTime] = useState<Date | null>(null);
     const [clockIn, setClockIn] = useState<string>('--:--');
     const [estimatedOut, setEstimatedOut] = useState<string>('06:00 PM');
+    const [logs, setLogs] = useState<any[]>([]);
 
     useEffect(() => {
         loadUser();
@@ -114,6 +115,7 @@ export default function AttendanceScreen() {
         setUser(userData);
     };
 
+
     const loadAttendanceStatus = async () => {
         const todayAttendance = await AttendanceManager.getTodayAttendance();
         if (todayAttendance) {
@@ -126,7 +128,7 @@ export default function AttendanceScreen() {
                 const ampm = checkInHour >= 12 ? 'PM' : 'AM';
                 const displayHour = checkInHour > 12 ? checkInHour - 12 : checkInHour === 0 ? 12 : checkInHour;
                 setClockIn(`${String(displayHour).padStart(2, '0')}:${String(checkInMin).padStart(2, '0')} ${ampm}`);
-                
+
                 // Calculate estimated checkout (9 hours from check-in)
                 const estimatedCheckOut = new Date(checkInDate);
                 estimatedCheckOut.setHours(estimatedCheckOut.getHours() + 9);
@@ -147,19 +149,19 @@ export default function AttendanceScreen() {
         const now = new Date();
         const currentHour = now.getHours();
         const currentMin = now.getMinutes();
-        
+
         // Check if late (after 9:30 AM)
         const isLate = currentHour > OFFICE_START_HOUR || (currentHour === OFFICE_START_HOUR && currentMin > 30);
-        
+
         await AttendanceManager.saveCheckIn(now);
         setCheckInTime(now);
         setIsCheckedIn(true);
-        
+
         // Format check-in time
         const ampm = currentHour >= 12 ? 'PM' : 'AM';
         const displayHour = currentHour > 12 ? currentHour - 12 : currentHour === 0 ? 12 : currentHour;
         setClockIn(`${String(displayHour).padStart(2, '0')}:${String(currentMin).padStart(2, '0')} ${ampm}`);
-        
+
         // Calculate estimated checkout (9 hours from check-in)
         const estimatedCheckOut = new Date(now);
         estimatedCheckOut.setHours(estimatedCheckOut.getHours() + 9);
@@ -168,7 +170,7 @@ export default function AttendanceScreen() {
         const outAmpm = outHour >= 12 ? 'PM' : 'AM';
         const outDisplayHour = outHour > 12 ? outHour - 12 : outHour === 0 ? 12 : outHour;
         setEstimatedOut(`${String(outDisplayHour).padStart(2, '0')}:${String(outMin).padStart(2, '0')} ${outAmpm}`);
-        
+
         // Reset timer
         setHours(0);
         setMinutes(0);
@@ -226,20 +228,20 @@ export default function AttendanceScreen() {
                     {/* Hero Section: Timer & Check In */}
                     <View style={styles.heroSection}>
                         {/* Date & Shift Info */}
-                        <View style={styles.dateShiftInfo}>
+                        {/* <View style={styles.dateShiftInfo}>
                             <Text style={[styles.dateLabel, dynamicStyles.dateLabel]}>
                                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                             </Text>
                             <Text style={[styles.shiftText, dynamicStyles.shiftText]}>Shift: 09:00 AM - 06:00 PM</Text>
-                        </View>
+                        </View> */}
 
                         {/* Timer Circle Visual */}
-                        {isCheckedIn && (
+                        {/* {isCheckedIn && (
                             <View style={styles.timerContainer}>
                                 <View style={[styles.timerRing, dynamicStyles.timerRing]} />
-                                <View style={[styles.timerCircle, dynamicStyles.timerCircle]}>
+                                <View style={[styles.timerCircle, dynamicStyles.timerCircle]}> */}
                                     {/* Timer Digits */}
-                                    <View style={styles.timerDigits}>
+                                    {/* <View style={styles.timerDigits}>
                                         <View style={styles.timerUnit}>
                                             <Text style={[styles.timerValue, dynamicStyles.timerValue]}>{String(hours).padStart(2, '0')}</Text>
                                             <Text style={[styles.timerLabel, dynamicStyles.timerLabel]}>Hrs</Text>
@@ -254,19 +256,19 @@ export default function AttendanceScreen() {
                                             <Text style={[styles.timerValue, { color: colors.primary }]}>{String(seconds).padStart(2, '0')}</Text>
                                             <Text style={[styles.timerLabel, { color: colors.primary }]}>Sec</Text>
                                         </View>
-                                    </View>
+                                    </View> */}
 
                                     {/* Status Text */}
-                                    <View style={[styles.statusBadge, { backgroundColor: `${STATIC_COLORS.emerald}20` }]}>
+                                    {/* <View style={[styles.statusBadge, { backgroundColor: `${STATIC_COLORS.emerald}20` }]}>
                                         <View style={[styles.statusDot, { backgroundColor: STATIC_COLORS.emerald }]} />
                                         <Text style={[styles.statusText, { color: STATIC_COLORS.emerald }]}>ON SHIFT</Text>
                                     </View>
                                 </View>
-                            </View>
-                        )}
+                            </View> */}
+                        {/* )} */}
 
                         {/* Verification Chips */}
-                        <View style={styles.verificationChips}>
+                        {/* <View style={styles.verificationChips}>
                             <View style={[styles.verificationChip, dynamicStyles.verificationChip]}>
                                 <MaterialIcons name="verified-user" size={18} color={STATIC_COLORS.emerald} />
                                 <Text style={[styles.verificationText, dynamicStyles.verificationText]}>Selfie Verified</Text>
@@ -275,10 +277,10 @@ export default function AttendanceScreen() {
                                 <MaterialIcons name="location-on" size={18} color={colors.primary} />
                                 <Text style={[styles.verificationText, dynamicStyles.verificationText]}>Location Active</Text>
                             </View>
-                        </View>
+                        </View> */}
 
                         {/* Main Action Button */}
-                        {isCheckedIn ? (
+                        {/* {isCheckedIn ? (
                             <TouchableOpacity
                                 style={[styles.checkOutButton, { shadowColor: colors.primary }]}
                                 onPress={handleCheckOut}
@@ -308,11 +310,11 @@ export default function AttendanceScreen() {
                                     <Text style={styles.checkOutButtonText}>CHECK IN</Text>
                                 </LinearGradient>
                             </TouchableOpacity>
-                        )}
+                        )} */}
                     </View>
 
                     {/* Quick Actions Grid */}
-                    <View style={styles.quickActionsGrid}>
+                    {/* <View style={styles.quickActionsGrid}>
                         <TouchableOpacity
                             style={[styles.quickActionCard, dynamicStyles.quickActionCard]}
                             onPress={handleRegularize}
@@ -332,18 +334,25 @@ export default function AttendanceScreen() {
                             </View>
                             <Text style={[styles.quickActionText, dynamicStyles.quickActionText]}>Request Overtime</Text>
                         </TouchableOpacity>
+                    </View> */}
+
+                    <View style={styles.pageWrapper}>
+                        <AttendanceTable
+                            colors={colors}
+                            isDark={isDark}
+                        />
                     </View>
 
                     {/* Attendance History */}
-                    <View style={styles.historySection}>
+                    {/* <View style={styles.historySection}>
                         <View style={styles.historyHeader}>
                             <Text style={[styles.historyTitle, dynamicStyles.historyTitle]}>Recent Activity</Text>
                             <TouchableOpacity>
                                 <Text style={[styles.viewAllText, { color: colors.primary }]}>View All</Text>
                             </TouchableOpacity>
-                        </View>
+                        </View> */}
 
-                        <View style={styles.historyList}>
+                        {/* <View style={styles.historyList}>
                             {ATTENDANCE_HISTORY.map((item) => (
                                 <View
                                     key={item.id}
@@ -395,8 +404,8 @@ export default function AttendanceScreen() {
                                     </View>
                                 </View>
                             ))}
-                        </View>
-                    </View>
+                        </View> */}
+                    {/* </View> */}
 
                     <View style={{ height: 100 }} />
                 </ScrollView>
@@ -501,6 +510,16 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
+
+    pageWrapper: {
+        flex: 1,
+        paddingHorizontal: 16,   // 👈 mobile spacing
+        width: '100%',
+        maxWidth: 1400,          // 👈 desktop centered layout
+        alignSelf: 'center',
+        marginBottom: 24,     // 👈 prevents wall sticking on large screens
+    },
+
     timerContainer: {
         position: 'relative',
         marginBottom: 32,

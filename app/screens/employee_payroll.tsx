@@ -1,8 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+    StatusBar as NativeStatusBar,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -10,13 +12,12 @@ import {
     Text,
     TouchableOpacity,
     View,
-    StatusBar as NativeStatusBar,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import EmployeeBottomTabBar from '../components/EmployeeBottomTabBar';
+import PayrollHistoryRecords from '../components/PayrollHistoryRecords';
 import { useTheme } from '../contexts/ThemeContext';
-import { SessionManager } from '../services/SessionManager';
-import { formatMoney, formatMonthYear, listPayslipsForEmployee, Payslip } from '../services/payroll';
+import { formatMoney } from '../services/payroll';
+import { fetchPayrollRecords, Payslip } from '../services/payrollHistory';
 
 export default function EmployeePayrollScreen() {
     const router = useRouter();
@@ -27,38 +28,27 @@ export default function EmployeePayrollScreen() {
     const [slips, setSlips] = useState<Payslip[]>([]);
 
     useEffect(() => {
-        const init = async () => {
-            const user = await SessionManager.getUser();
-            const employeeId = user?.id != null ? String(user.id) : '';
-            if (!employeeId) {
+        const loadPayroll = async () => {
+            try {
+                const data = await fetchPayrollRecords();
+                console.log("Payroll Records:", data); // 🔍 Debug
+                setSlips(data);
+            } catch (error) {
+                console.error("Failed to load payroll:", error);
                 setSlips([]);
-                return;
             }
-            const list = await listPayslipsForEmployee(employeeId);
-            setSlips(list);
         };
-        init();
+
+        loadPayroll();
     }, []);
 
     const latestSlip = slips[0];
     const currencySymbol = latestSlip?.currencySymbol || '₨';
-    const lastSalaryText = latestSlip ? formatMoney(latestSlip.totals.netPay, currencySymbol) : `${currencySymbol}0.00`;
-    const lastPaymentDateText = latestSlip
-        ? new Date(latestSlip.payDateISO).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        : '—';
-
-    const handleViewSlip = (slip: Payslip) => {
-        router.push({
-            pathname: '/screens/salary_slip',
-            params: {
-                payslipId: slip.id,
-            },
-        } as any);
-    };
-
-    const handleBreakdown = () => {
-        // Navigate to breakdown or show modal
-    };
+    const lastSalaryText = latestSlip
+        ? formatMoney(latestSlip.netPay, currencySymbol)
+        : `${currencySymbol}0.00`; const lastPaymentDateText = latestSlip
+            ? new Date(latestSlip.payDateISO).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
 
     return (
         <View style={[styles.container, dynamicStyles.container]}>
@@ -115,110 +105,16 @@ export default function EmployeePayrollScreen() {
                                         <Text style={styles.paymentDateLabel}>Payment Date</Text>
                                         <Text style={styles.paymentDateValue}>{lastPaymentDateText}</Text>
                                     </View>
-                                    <TouchableOpacity style={styles.breakdownButton} onPress={handleBreakdown}>
+                                    {/* <TouchableOpacity style={styles.breakdownButton} onPress={handleBreakdown}>
                                         <Text style={styles.breakdownButtonText}>Breakdown</Text>
                                         <MaterialIcons name="arrow-forward" size={16} color={colors.primary} />
-                                    </TouchableOpacity>
+                                    </TouchableOpacity> */}
                                 </View>
                             </View>
                         </LinearGradient>
                     </View>
 
-                    {/* List Header */}
-                    <View style={styles.listHeader}>
-                        <Text style={[styles.listTitle, dynamicStyles.listTitle]}>Salary History</Text>
-                        <TouchableOpacity style={styles.filterButton}>
-                            <MaterialIcons name="filter-list" size={20} color={colors.primary} />
-                            <Text style={[styles.filterText, { color: colors.primary }]}>Filter</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Salary History List */}
-                    <View style={styles.historyList}>
-                        {slips.map((slip) => {
-                            const month = formatMonthYear(slip.periodYear, slip.periodMonth);
-                            const amount = formatMoney(slip.totals.netPay, slip.currencySymbol || '₨');
-                            const paymentDate = new Date(slip.payDateISO).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                            return (
-                            <View key={slip.id} style={[styles.historyItem, dynamicStyles.historyItem]}>
-                                <View style={styles.historyItemLeft}>
-                                    <View
-                                        style={[
-                                            styles.historyIcon,
-                                            {
-                                                backgroundColor: isDark ? `${colors.primary}33` : '#eaf4fe',
-                                            },
-                                        ]}
-                                    >
-                                        <MaterialIcons
-                                            name={'receipt-long' as any}
-                                            size={24}
-                                            color={colors.primary}
-                                        />
-                                    </View>
-                                    <View style={styles.historyItemInfo}>
-                                        <View style={styles.historyItemTop}>
-                                            <Text style={[styles.historyMonth, dynamicStyles.historyMonth]}>{month}</Text>
-                                            <Text style={[styles.historyAmount, dynamicStyles.historyAmount]}>{amount}</Text>
-                                        </View>
-                                        <View style={styles.historyItemBottom}>
-                                            <View style={styles.historyStatusRow}>
-                                                <View
-                                                    style={[
-                                                        styles.statusChip,
-                                                        {
-                                                            backgroundColor: `${STATIC_COLORS.emerald}20`,
-                                                            borderColor: `${STATIC_COLORS.emerald}40`,
-                                                        },
-                                                    ]}
-                                                >
-                                                    <View
-                                                        style={[
-                                                            styles.statusDot,
-                                                            {
-                                                                backgroundColor: STATIC_COLORS.emerald,
-                                                            },
-                                                        ]}
-                                                    />
-                                                    <Text
-                                                        style={[
-                                                            styles.statusChipText,
-                                                            {
-                                                                color: STATIC_COLORS.emerald,
-                                                            },
-                                                        ]}
-                                                    >
-                                                        Paid
-                                                    </Text>
-                                                </View>
-                                                <Text style={[styles.paymentDateText, dynamicStyles.paymentDateText]}>
-                                                    {paymentDate}
-                                                </Text>
-                                            </View>
-                                            <TouchableOpacity
-                                                style={styles.viewSlipButton}
-                                                onPress={() => handleViewSlip(slip)}
-                                            >
-                                                <MaterialIcons name="visibility" size={18} color={colors.primary} />
-                                                <Text style={[styles.viewSlipText, { color: colors.primary }]}>
-                                                    View Slip
-                                                </Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                </View>
-                            </View>
-                        )})}
-
-                        {slips.length === 0 && (
-                            <View style={[styles.emptyState, dynamicStyles.historyItem]}>
-                                <Text style={[styles.emptyTitle, dynamicStyles.historyMonth]}>No payroll yet</Text>
-                                <Text style={[styles.emptySub, dynamicStyles.paymentDateText]}>
-                                    Once admin processes payroll for a month, your payslips will appear here.
-                                </Text>
-                            </View>
-                        )}
-                    </View>
+                    <PayrollHistoryRecords slips={slips} />
 
                     <View style={{ height: 100 }} />
                 </ScrollView>

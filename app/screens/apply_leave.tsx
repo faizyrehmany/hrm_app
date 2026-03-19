@@ -1,24 +1,25 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
+    StatusBar as NativeStatusBar,
     Platform,
     SafeAreaView,
     ScrollView,
     StyleSheet,
-    Switch,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
-    StatusBar as NativeStatusBar,
+    View
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../contexts/ThemeContext';
+import { createLeaveRequest } from '../services/leave';
+import { SessionManager } from '../services/SessionManager';
 
 const LEAVE_TYPES = [
     { value: 'sick', label: 'Sick Leave' },
@@ -99,13 +100,39 @@ export default function ApplyLeaveScreen() {
         }
 
         setIsLoading(true);
-        // Simulate API call
-        setTimeout(() => {
+        try {
+            // Get logged-in user
+            const user = await SessionManager
+            .getUser(); // Must return { id: number, ... }
+            if (!user || !user.id) {
+                Alert.alert('Error', 'Unable to identify user. Please login again.');
+                setIsLoading(false);
+                return;
+            }
+
+            const payload = {
+                employeeId: user.id,
+                startDate: startDate!.toISOString(),
+                endDate: endDate!.toISOString(),
+                leaveType: LEAVE_TYPES.find((t) => t.value === selectedLeaveType)?.label || selectedLeaveType,
+                reason: reason.trim(),
+            };
+
+            const result = await createLeaveRequest(payload);
+
+            if (result) {
+                Alert.alert('Success', 'Leave request submitted successfully', [
+                    { text: 'OK', onPress: () => router.back() },
+                ]);
+            } else {
+                Alert.alert('Error', 'Failed to submit leave request. Please try again.');
+            }
+        } catch (error) {
+            console.error('Submit error:', error);
+            Alert.alert('Error', 'Something went wrong. Please try again.');
+        } finally {
             setIsLoading(false);
-            Alert.alert('Success', 'Leave request submitted successfully', [
-                { text: 'OK', onPress: () => router.back() },
-            ]);
-        }, 1000);
+        }
     };
 
     return (
@@ -233,7 +260,7 @@ export default function ApplyLeaveScreen() {
                     </View>
 
                     {/* Half Day Toggle */}
-                    <View style={[styles.toggleCard, dynamicStyles.toggleCard]}>
+                    {/* <View style={[styles.toggleCard, dynamicStyles.toggleCard]}>
                         <View style={styles.toggleInfo}>
                             <Text style={[styles.toggleTitle, dynamicStyles.toggleTitle]}>Half Day Leave</Text>
                             <Text style={[styles.toggleSub, dynamicStyles.toggleSub]}>Apply for a half day absence</Text>
@@ -245,7 +272,7 @@ export default function ApplyLeaveScreen() {
                             onValueChange={setIsHalfDay}
                             value={isHalfDay}
                         />
-                    </View>
+                    </View> */}
 
                     {/* Reason Section */}
                     <View style={styles.inputGroup}>
@@ -263,7 +290,7 @@ export default function ApplyLeaveScreen() {
                     </View>
 
                     {/* Attachment Section */}
-                    <View style={styles.inputGroup}>
+                    {/* <View style={styles.inputGroup}>
                         <Text style={[styles.label, dynamicStyles.label]}>Attachments (Optional)</Text>
                         <TouchableOpacity style={[styles.uploadArea, dynamicStyles.uploadArea]}>
                             <View style={styles.uploadContent}>
@@ -278,7 +305,7 @@ export default function ApplyLeaveScreen() {
                                 </Text>
                             </View>
                         </TouchableOpacity>
-                    </View>
+                    </View> */}
 
                     <View style={{ height: 100 }} />
                 </ScrollView>

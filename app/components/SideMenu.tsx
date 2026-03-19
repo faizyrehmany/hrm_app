@@ -7,15 +7,17 @@ import {
     Dimensions,
     Image,
     Modal,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     TouchableWithoutFeedback,
-    View
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { SessionManager, User } from '../services/SessionManager';
+import { EmployeeApi } from '../services/auth';
 
 const { width, height } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(width * 0.85, 320);
@@ -33,6 +35,36 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
     const [isAdmin, setIsAdmin] = useState(false);
     const [slideAnim] = useState(new Animated.Value(-DRAWER_WIDTH));
     const [overlayOpacity] = useState(new Animated.Value(0));
+
+
+
+    const [displayName, setDisplayName] = useState('');
+    const [department, setDepartment] = useState('');
+
+    useEffect(() => {
+        const loadEmployee = async () => {
+            try {
+                const data = await EmployeeApi.getEmployeeDetails();
+
+                if (data) {
+                    const name =
+                        data.firstName && data.lastName
+                            ? `${data.firstName} ${data.lastName}`
+                            : `Employee #${data.employeeId}`;
+
+                    setDisplayName(name);
+                    setDepartment(data.departmentName || '');
+                } else {
+                    setDisplayName('Employee');
+                }
+            } catch (err) {
+                console.error('Failed to fetch employee details', err);
+                setDisplayName('Employee');
+            }
+        };
+
+        loadEmployee();
+    }, []);
 
     useEffect(() => {
         if (visible) {
@@ -71,13 +103,19 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
         const userData = await SessionManager.getUser();
         setUser(userData);
 
-        // Check if user is admin
-        const roles = userData?.roles || [];
-        const admin = roles.some((role: string) => role.toLowerCase() === 'admin');
+        let roles: string[] = [];
+
+        if (Array.isArray(userData?.role)) {
+            roles = userData.role;
+        } else if (typeof userData?.role === 'string') {
+            roles = [userData.role];
+        }
+
+        const admin = roles.some(role => role.toLowerCase() === 'admin');
         setIsAdmin(admin);
     };
 
-    const handleLogout = async () => {
+    const handle = async () => {
         await SessionManager.clearSession();
         onClose();
         router.replace('/');
@@ -94,15 +132,14 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
         }, 300);
     };
 
-    const MenuItem = ({ icon, label, route, isActive = false }: { icon: any, label: string, route?: string, isActive?: boolean }) => {
+    const MenuItem = ({ icon, label, route, isActive = false, onPress }: { icon: any; label: string; route?: string; isActive?: boolean; onPress?: () => void }) => {
         return (
             <TouchableOpacity
                 style={[
                     styles.menuItem,
-                    isActive && styles.menuItemActive,
                     isActive && { backgroundColor: isDark ? '#1e3a8a30' : '#eff6ff' }
                 ]}
-                onPress={() => route && navigateTo(route)}
+                onPress={() => (onPress ? onPress() : route && navigateTo(route))}
             >
                 <MaterialIcons
                     name={icon}
@@ -129,6 +166,7 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
             transparent
             visible={visible}
             onRequestClose={onClose}
+            statusBarTranslucent
         >
             <View style={styles.modalContainer}>
                 {/* Backdrop */}
@@ -145,10 +183,10 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
                         {
                             transform: [{ translateX: slideAnim }],
                             backgroundColor: isDark ? '#1A2633' : '#FFFFFF',
-                            paddingTop: 0, // Reset default padding
+                            paddingTop: 0,
                         },
-                    ]}>
-
+                    ]}
+                >
                     {/* Header with Gradient */}
                     <LinearGradient
                         colors={['#0f172a', '#1e293b', '#137fec']}
@@ -156,9 +194,7 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
                         end={{ x: 1, y: 1 }}
                         style={[styles.headerGradient, { paddingTop: insets.top + 20 }]}
                     >
-                        {/* Abstract Background Decoration */}
                         <View style={styles.headerDecoration} />
-
                         <View style={styles.userInfoContainer}>
                             <View style={styles.avatarContainer}>
                                 <Image
@@ -168,8 +204,11 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
                                 <View style={styles.onlineStatus} />
                             </View>
                             <View style={styles.userDetails}>
-                                <Text style={styles.userNameText} numberOfLines={1}>
-                                    {user?.username || 'Guest User'}
+                                <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textMain }}>
+                                    {displayName || 'Guest User'}
+                                </Text>
+                                <Text style={styles.userRoleText}>
+                                    {user?.departmentName ? user.departmentName : (isAdmin ? 'Super Admin' : 'Employee')}
                                 </Text>
                                 <Text style={styles.userRoleText}>
                                     {isAdmin ? 'Super Admin' : 'Employee'}
@@ -178,59 +217,68 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
                         </View>
                     </LinearGradient>
 
-                    {/* Menu Items List */}
-                    <View style={styles.scrollContainer}>
-                        <View style={styles.menuGroup}>
-                            {isAdmin ? (
-                                <>
-                                    <MenuItem icon="grid-view" label="Dashboard" route="/screens/dashboard" />
-                                    <MenuItem icon="work" label="Jobs" route="/screens/jobs" />
-                                    <MenuItem icon="schedule" label="Attendance" route="/screens/attendance" />
-                                    <MenuItem icon="payments" label="Payroll" route="/screens/payroll" />
+                    {/* Make the menu scrollable */}
+                    <ScrollView
+                        style={styles.scrollContainer}
+                        contentContainerStyle={styles.menuGroup}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {isAdmin ? (
+                            <>
+                                <MenuItem icon="grid-view" label="Dashboard" route="/screens/dashboard" />
+                                <MenuItem icon="work" label="Jobs" route="/screens/jobs" />
+                                {/* <MenuItem icon="schedule" label="Attendance" route="/screens/attendance" /> */}
+                                <MenuItem icon="payments" label="Payroll" route="/screens/payroll" />
 
-                                    <View style={[styles.divider, { backgroundColor: isDark ? '#334155' : '#f1f5f9' }]} />
+                                <View style={[styles.divider, { backgroundColor: isDark ? '#334155' : '#f1f5f9' }]} />
 
-                                    <MenuItem icon="fact-check" label="Leave Types" route="/screens/leave_types" />
-                                    <MenuItem icon="badge" label="Designations" route="/screens/designations" />
-                                    <MenuItem icon="event" label="Holidays" route="/screens/holidays" />
-                                    <MenuItem icon="settings" label="Settings" route="/screens/admin_settings" />
-                                </>
-                            ) : (
-                                <>
-                                    <MenuItem icon="home" label="Home" route="/screens/employee_dashboard" isActive />
-                                    <MenuItem icon="payments" label="My Payroll" route="/screens/employee_payroll" />
-                                    <MenuItem icon="calendar-today" label="Calendar" />
-                                    <MenuItem icon="description" label="My Requests" />
-                                    <MenuItem icon="person" label="Profile" route="/screens/employee_profile" />
+                                <MenuItem icon="fact-check" label="Leave Types" route="/screens/leave_types" />
+                                <MenuItem icon="badge" label="Designations" route="/screens/designations" />
+                                <MenuItem icon="event" label="Holidays" route="/screens/holidays" />
+                                <MenuItem icon="settings" label="Settings" route="/screens/admin_settings" />
+                                <MenuItem icon="logout" label="Logout" onPress={handle} />
 
-                                    <View style={[styles.divider, { backgroundColor: isDark ? '#334155' : '#f1f5f9' }]} />
+                            </>
+                        ) : (
+                            <>
+                                <MenuItem icon="home" label="Home" route="/screens/employee_dashboard" isActive />
+                                <MenuItem icon="payments" label="My Payroll" route="/screens/employee_payroll" />
+                                {/* <MenuItem icon="calendar-today" label="Calendar" /> */}
+                                {/* <MenuItem icon="description" label="My Requests" /> */}
+                                <MenuItem icon="person" label="Profile" route="/screens/employee_profile" />
+                                <MenuItem icon="receipt" label="Allowances" route="/screens/allowances" />
+                                <MenuItem icon="event" label="Holidays" route="/screens/holidays" />
 
-                                    <MenuItem icon="settings" label="Settings" />
-                                </>
-                            )}
-                        </View>
-                    </View>
+                                <View style={[styles.divider, { backgroundColor: isDark ? '#334155' : '#f1f5f9' }]} />
+
+                                <MenuItem icon="settings" label="Settings" route="/screens/settings" />
+                                <MenuItem icon="logout" label="Logout" onPress={handle} />
+
+                            </>
+                        )}
+                    </ScrollView>
+
+                    {/* <TouchableOpacity
+                        style={[
+                            styles.logoutBtn,
+                            {
+                                backgroundColor: isDark ? 'rgba(127, 29, 29, 0.2)' : '#fef2f2',
+                                borderColor: isDark ? 'rgba(127, 29, 29, 0.4)' : '#fee2e2',
+                            },
+                        ]}
+                        onPress={handle}
+
+                    >
+                        <MaterialIcons name="logout" size={20} color="#dc2626" />
+                        <Text style={styles.logoutText}>Logout</Text>
+                    </TouchableOpacity> */}
 
                     {/* Footer */}
                     <View style={[styles.footer, { borderTopColor: isDark ? '#334155' : '#f1f5f9' }]}>
-                        <TouchableOpacity
-                            style={[
-                                styles.logoutBtn,
-                                {
-                                    backgroundColor: isDark ? 'rgba(127, 29, 29, 0.2)' : '#fef2f2',
-                                    borderColor: isDark ? 'rgba(127, 29, 29, 0.4)' : '#fee2e2'
-                                }
-                            ]}
-                            onPress={handleLogout}
-                        >
-                            <MaterialIcons name="logout" size={20} color="#dc2626" />
-                            <Text style={styles.logoutText}>Logout</Text>
-                        </TouchableOpacity>
                         <Text style={[styles.versionText, { color: isDark ? '#64748b' : '#94a3b8' }]}>
                             v2.4.0 • HRM System
                         </Text>
                     </View>
-
                 </Animated.View>
             </View>
         </Modal>
@@ -365,6 +413,7 @@ const styles = StyleSheet.create({
     footer: {
         padding: 24,
         borderTopWidth: 1,
+
     },
     logoutBtn: {
         flexDirection: 'row',

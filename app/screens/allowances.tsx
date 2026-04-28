@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdvanceSalaryModal } from '../components/AdvanceSalaryModal';
+import EmployeeBottomTabBar from '../components/EmployeeBottomTabBar';
 import EmployeeHeader from '../components/EmployeeHeader';
 import { LoanModal } from '../components/RequestLoanModal';
 import SideMenu from '../components/SideMenu';
@@ -245,6 +246,7 @@ export default function LoansScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
             <EmployeeHeader
                 user={user}
+                title="Allowances"
                 onMenuPress={() => setMenuVisible(true)}
                 onNotificationPress={() => console.log('Notifications pressed')}
             />
@@ -339,6 +341,7 @@ export default function LoansScreen() {
             ) : user?.employeeId ? (
                 <AdvanceSalaryModal isVisible={isModalVisible} onClose={() => setIsModalVisible(false)} employeeId={user.employeeId} onSubmit={handleAdvanceSubmit} />
             ) : null}
+            <EmployeeBottomTabBar activeTab="home" />
         </SafeAreaView>
     );
 }

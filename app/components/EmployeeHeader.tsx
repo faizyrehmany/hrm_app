@@ -1,7 +1,7 @@
 // components/EmployeeHeader.tsx
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { User } from '../services/SessionManager';
 
@@ -9,13 +9,15 @@ interface EmployeeHeaderProps {
     user: User | null;
     onMenuPress: () => void;
     onNotificationPress?: () => void;
+    title?: string; // ✅ ADD THIS
+
 }
 
 const STATIC_COLORS = {
     red: '#ef4444',
 };
 
-const EmployeeHeader: React.FC<EmployeeHeaderProps> = ({ user, onMenuPress, onNotificationPress }) => {
+const EmployeeHeader: React.FC<EmployeeHeaderProps> = ({ user, onMenuPress, onNotificationPress, title }) => {
     const { isDark, colors } = useTheme();
 
     return (
@@ -28,10 +30,20 @@ const EmployeeHeader: React.FC<EmployeeHeaderProps> = ({ user, onMenuPress, onNo
                     <MaterialIcons name="menu" size={24} color={colors.textMain} />
                 </TouchableOpacity>
                 <View style={styles.headerInfo}>
-                    {/* <Text style={[styles.welcomeText, { color: colors.textSub }]}>Welcome back,</Text>
-                    <Text style={[styles.userName, { color: colors.textMain }]}>
-                        {user?.fullName || user?.username || 'Employee'}
-                    </Text> */}
+                    {title ? (
+                        <Text style={[styles.userName, { color: colors.textMain }]}>
+                            {title}
+                        </Text>
+                    ) : (
+                        <>
+                            <Text style={[styles.welcomeText, { color: colors.textSub }]}>
+                                Welcome back,
+                            </Text>
+                            <Text style={[styles.userName, { color: colors.textMain }]}>
+                                {user?.fullName || user?.username || 'Employee'}
+                            </Text>
+                        </>
+                    )}
                 </View>
             </View>
             {/* <TouchableOpacity

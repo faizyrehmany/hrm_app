@@ -14,46 +14,58 @@ export interface AttendanceLog {
 // Fetch attendance logs for logged-in employee
 export const getAttendanceLogs = async (
     enrollNo: string
-  ): Promise<AttendanceLog[]> => {
+): Promise<AttendanceLog[]> => {
     if (!enrollNo) throw new Error("Enroll number missing");
-  
+
     const token = await SessionManager.getToken();
-  
+
     if (!token) throw new Error("No token found");
-  
+
     const url = `http://103.134.238.50:85/api/zk/logs?enrollNo=${enrollNo}`;
-  
-    console.log("🔵 Calling:", url);
-    console.log("🔵 EnrollNo:", enrollNo);
-    console.log("🔵 Token exists:", !!token);
-  
+
+    // console.log("🔵 Calling:", url);
+    // console.log("🔵 EnrollNo:", enrollNo);
+    // console.log("🔵 Token exists:", !!token);
+
     try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-  
-      console.log("🟢 Response status:", response.status);
-  
-      if (!response.ok) {
-        const text = await response.text();
-        console.log("🔴 Error response:", text);
-        throw new Error(text || `HTTP ${response.status}`);
-      }
-  
-      const json = await response.json();
-      console.log("🟢 Response data:", json);
-  
-      return Array.isArray(json.items) ? json.items : [];
-  
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+        });
+
+        console.log("🟢 Response status:", response.status);
+
+        if (!response.ok) {
+            const text = await response.text();
+            console.log("🔴 Error response:", text);
+            throw new Error(text || `HTTP ${response.status}`);
+        }
+
+        const json = await response.json();
+        // console.log("🟢 Response data:", json);
+
+        // REPLACE with this:
+        const rawItems: AttendanceLog[] = Array.isArray(json.items) ? json.items : [];
+
+        const seen = new Set<string>();
+        const dedupedItems = rawItems.filter((log) => {
+            const key = `${log.logTime}-${log.inOutMode}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        // console.log(`🟡 Raw: ${rawItems.length}, After dedup: ${dedupedItems.length}`);
+        return dedupedItems;
+
     } catch (error: any) {
-      console.log("🔴 Fetch error:", error);
-      throw new Error(error.message || "Network request failed");
+        console.log("🔴 Fetch error:", error);
+        throw new Error(error.message || "Network request failed");
     }
-  };
+};
 // Attendance correction type
 export interface AttendanceCorrection {
     employeeId: string;

@@ -247,11 +247,15 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
                                 {/* <MenuItem icon="description" label="My Requests" /> */}
                                 <MenuItem icon="person" label="Profile" route="/screens/employee_profile" />
                                 <MenuItem icon="receipt" label="Allowances" route="/screens/allowances" />
-                                <MenuItem icon="event" label="Holidays" route="/screens/holidays" />
+                                <MenuItem icon="event" label="Holidays" route="/screens/employee_holidays" />
+                                <MenuItem icon="grading" label="Grading System" route="/screens/employee_grading" />
+                                <MenuItem icon="receipt" label="Expense Management" route="/screens/employee_expense" />
+                                <MenuItem icon="add" label="Increment" route="/screens/employee_increment" />
 
                                 <View style={[styles.divider, { backgroundColor: isDark ? '#334155' : '#f1f5f9' }]} />
+                                
 
-                                <MenuItem icon="settings" label="Settings" route="/screens/settings" />
+                                {/* <MenuItem icon="settings" label="Settings" route="/screens/settings" /> */}
                                 <MenuItem icon="logout" label="Logout" onPress={handle} />
 
                             </>
@@ -375,6 +379,7 @@ const styles = StyleSheet.create({
     menuGroup: {
         paddingHorizontal: 12,
         gap: 8,
+        paddingBottom: 34,
     },
     menuItem: {
         flexDirection: 'row',
@@ -407,7 +412,7 @@ const styles = StyleSheet.create({
     },
     divider: {
         height: 1,
-        marginVertical: 12,
+        marginVertical: 10,
         marginHorizontal: 16,
     },
     footer: {

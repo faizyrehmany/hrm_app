@@ -10,7 +10,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { LineChart, PieChart } from "react-native-chart-kit";
+import { PieChart } from "react-native-chart-kit";
+import { BarChart } from "react-native-gifted-charts";
 import { SafeAreaView } from "react-native-safe-area-context";
 import EmployeeBottomTabBar from "../components/EmployeeBottomTabBar";
 import EmployeeHeader from "../components/EmployeeHeader";
@@ -64,7 +65,56 @@ export default function DashboardScreen() {
     const [attendanceCorrections, setAttendanceCorrections] = useState<any[]>([]);
     const [loadingCorrections, setLoadingCorrections] = useState(true);
 
+    const [selectedBar, setSelectedBar] = useState<{
+        label: string;
+        value: number;
+        index: number;
+        x: number;
+    } | null>(null);
+
+    const [tooltipVisible, setTooltipVisible] = useState(false);
+
     const [displayName, setDisplayName] = useState('');
+
+    const TOOLTIP_WIDTH = 80;
+
+    const formatYLabel = (label: string): string => {
+        const num = parseFloat(label);
+        if (isNaN(num) || num === 0) return label;
+        const absNum = Math.abs(num);
+        if (absNum >= 1_000_000) return (absNum / 1_000_000).toFixed(absNum < 10_000_000 ? 2 : 1) + " M";
+        if (absNum >= 1_000) return Math.round(absNum / 1_000) + " K";
+        return num.toLocaleString();
+    };
+
+    const showBarTooltip = (item: any, index: number) => {
+        let x =
+            3 + // initialSpacing
+            index * (barWidth + spacing) +
+            barWidth / 2 -
+            TOOLTIP_WIDTH / 2;
+
+        // Clamp x position to keep tooltip within mobile view
+        const minX = 30; // left padding
+        const maxX = screenWidth - 30 - TOOLTIP_WIDTH; // right padding - tooltip width
+
+        x = Math.max(minX, Math.min(x, maxX));
+
+        setSelectedBar({
+            label: item.label ?? "",
+            value: item.value ?? 0,
+            index,
+            x,
+        });
+
+        setTooltipVisible(true);
+
+        setTimeout(() => {
+            setTooltipVisible(false);
+            setSelectedBar(null);
+        }, 9800);
+    };
+
 
 
     const now = new Date();
@@ -176,13 +226,26 @@ export default function DashboardScreen() {
             setLoadingLogs(true);
             try {
                 const logs = await getAttendanceLogs(user.enrollNo);
+
+                // console.log("RAW API logs count:", logs.length);
+                // console.log("RAW first 3:", JSON.stringify(logs.slice(0, 3)));
                 const correctedLogs = logs.map((log) => ({
                     workDate: log.logTime,
                     logTime: log.logTime,
                     modeLabel: log.inOutMode === 0 ? "CheckIn" : "CheckOut",
                     status: "Pending",
                 }));
-                setAttendanceLogs(correctedLogs);
+
+                // ✅ Deduplicate by logTime + mode — belt and suspenders fix
+                const seen = new Set<string>();
+                const dedupedLogs = correctedLogs.filter((log) => {
+                    const key = `${log.logTime}-${log.modeLabel}`;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+
+                setAttendanceLogs(dedupedLogs);
             } catch (err) {
                 console.error("Failed to fetch attendance logs:", err);
             } finally {
@@ -190,7 +253,7 @@ export default function DashboardScreen() {
             }
         };
         fetchAttendanceLogs();
-    }, [user]);
+    }, [user?.enrollNo]);
 
     useEffect(() => {
         const loadLeaves = async () => {
@@ -217,7 +280,7 @@ export default function DashboardScreen() {
             }
         };
         fetchCorrections();
-    }, [user]);
+    }, [user?.enrollNo]);
 
     // ──────────────────────────────────────────────
     // Filtering logic (kept minimal – only what's needed for tables + pending)
@@ -292,6 +355,8 @@ export default function DashboardScreen() {
         const grouped: Record<string, any[]> = {};
 
         filteredAttendanceLogs.forEach((log) => {
+            // console.log("logs", `${log.logTime} | ${log.modeLabel}`);
+
             const dateObj = parseLocalDate(log.logTime);
 
 
@@ -310,7 +375,9 @@ export default function DashboardScreen() {
             const sorted = logs.sort((a, b) => a.time.getTime() - b.time.getTime());
 
             const firstIn = sorted.find(l => l.mode === "CheckIn");
-            const lastOut = [...sorted].reverse().find(l => l.mode === "CheckOut");
+            const lastOut = sorted
+                .filter(l => l.mode === "CheckOut")
+                .sort((a, b) => b.time.getTime() - a.time.getTime())[0];
 
             if (firstIn) {
                 const h = firstIn.time.getHours();
@@ -337,11 +404,20 @@ export default function DashboardScreen() {
 
     const getTotalWorkDaysInMonth = (month: number, year: number, holidaysList: any[] = []) => {
         let count = 0;
+        const today = new Date();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        for (let day = 1; day <= daysInMonth; day++) {
+
+        // ✅ If it's the current month/year, only count up to today
+        const lastDay = (month === today.getMonth() && year === today.getFullYear())
+            ? today.getDate()
+            : daysInMonth;
+
+        for (let day = 1; day <= lastDay; day++) {
             const date = new Date(year, month, day);
             const isSunday = date.getDay() === 0;
-            const isHoliday = holidaysList.some(h => parseLocalDate(h.date).toDateString() === date.toDateString());
+            const isHoliday = holidaysList.some(
+                h => parseLocalDate(h.date).toDateString() === date.toDateString()
+            );
             if (!isSunday && !isHoliday) count++;
         }
         return count;
@@ -368,8 +444,6 @@ export default function DashboardScreen() {
         })
     );
 
-
-
     const totalWorkDays = filterMonth !== null && filterYear !== null
         ? getTotalWorkDaysInMonth(filterMonth, filterYear, holidays)
         : 0;
@@ -386,10 +460,9 @@ export default function DashboardScreen() {
     const leavesThisMonth = leaveDatesSet.size;
     const attendancePercent = `${attendancePercentValue}%`;
 
-    const SHIFT_START_HOUR = 9;   // 9:00 AM
-    const SHIFT_END_HOUR = 18;    // 5:00 PM
-
-    //calculate shift stats
+    const SHIFT_START_HOUR = 9;
+    const SHIFT_START_MINUTE = 29; // ✅ 9:30 AM
+    const SHIFT_END_HOUR = 18;
 
     const calculateShiftStats = () => {
         let onTimeCount = 0;
@@ -401,10 +474,7 @@ export default function DashboardScreen() {
         filteredAttendanceLogs.forEach((log) => {
             const dateObj = parseLocalDate(log.logTime);
 
-            // Skip if not in selected month/year
             if (dateObj.getMonth() !== filterMonth || dateObj.getFullYear() !== filterYear) return;
-
-            // Skip Sundays and holidays
             if (dateObj.getDay() === 0) return;
             const isHoliday = holidays.some(h => parseLocalDate(h.date).toDateString() === dateObj.toDateString());
             if (isHoliday) return;
@@ -420,20 +490,24 @@ export default function DashboardScreen() {
             const firstIn = logs.find(l => l.mode === "CheckIn");
             const lastOut = [...logs].reverse().find(l => l.mode === "CheckOut");
 
-            if (!firstIn || !lastOut) return;
+            if (!firstIn) return;
 
-            // Check-in analysis
-            if (firstIn.time.getHours() < SHIFT_START_HOUR ||
-                (firstIn.time.getHours() === SHIFT_START_HOUR && firstIn.time.getMinutes() === 0)
-            ) {
+            // ✅ Check-in analysis using total minutes
+            const totalInMinutes = firstIn.time.getHours() * 60 + firstIn.time.getMinutes();
+            const shiftStartMinutes = SHIFT_START_HOUR * 60 + SHIFT_START_MINUTE; // 570
+
+            if (totalInMinutes <= shiftStartMinutes) {
                 onTimeCount++;
             } else {
                 lateCount++;
             }
 
-            // Check-out analysis
-            if (lastOut.time.getHours() < SHIFT_END_HOUR) {
-                earlyCount++;
+            // ✅ Check-out analysis — only if lastOut exists
+            if (lastOut) {
+                const totalOutMinutes = lastOut.time.getHours() * 60 + lastOut.time.getMinutes();
+                if (totalOutMinutes < SHIFT_END_HOUR * 60) {
+                    earlyCount++;
+                }
             }
         });
 
@@ -468,11 +542,10 @@ export default function DashboardScreen() {
     const calculateDailyWorkHours = () => {
         if (!filteredAttendanceLogs.length) return { labels: [], hours: [], totalHours: 0 };
 
-        const grouped: Record<number, any[]> = {}; // use timestamp as key
+        const grouped: Record<number, any[]> = {};
 
         filteredAttendanceLogs.forEach((log) => {
             const dateObj = parseLocalDate(log.logTime);
-
 
             if (
                 dateObj.getMonth() !== monthMap[selectedMonth!] ||
@@ -492,20 +565,34 @@ export default function DashboardScreen() {
             .map(k => Number(k))
             .sort((a, b) => a - b)
             .forEach((ts) => {
-                const logs = grouped[ts].sort((a, b) => a.time.getTime() - b.time.getTime());
-                const firstIn = logs.find(l => l.mode === "CheckIn");
-                const lastOut = [...logs].reverse().find(l => l.mode === "CheckOut");
-                if (!firstIn || !lastOut) return;
+                let logs = grouped[ts].sort((a, b) => a.time.getTime() - b.time.getTime());
 
-                const diffMinutes = (lastOut.time.getTime() - firstIn.time.getTime()) / 60000;
-                if (diffMinutes <= 0) return;
-                hours.push(Number((diffMinutes / 60).toFixed(2)));
+                let dailyMinutes = 0;
+                let lastCheckIn: Date | null = null;
 
-                const dayNumber = new Date(ts).getDate();
-                labels.push(dayNumber.toString()); // horizontal label = day of month
+                logs.forEach(log => {
+                    if (log.mode === "CheckIn") {
+                        lastCheckIn = log.time;
+                    } else if (log.mode === "CheckOut" && lastCheckIn) {
+                        const diff = (log.time.getTime() - lastCheckIn.getTime()) / 60000;
+                        if (diff > 0 && diff < 12 * 60) {
+                            dailyMinutes += diff;
+                        }
+                        lastCheckIn = null;
+                    }
+                });
 
-                totalMinutes += diffMinutes;
+                // ✅ DEBUG — see exactly what each day contributes
+                // console.log(`📅 ${new Date(ts).toDateString()} → ${(dailyMinutes / 60).toFixed(2)}h | logs: ${logs.map(l => l.mode + "@" + l.time.toTimeString().slice(0, 5)).join(", ")}`);
+
+                if (dailyMinutes > 0) {
+                    hours.push(Number((dailyMinutes / 60).toFixed(2)));
+                    labels.push(new Date(ts).getDate().toString());
+                    totalMinutes += dailyMinutes;
+                }
             });
+
+        // console.log("🕐 TOTAL HOURS:", (totalMinutes / 60).toFixed(2));
 
         return {
             labels,
@@ -516,6 +603,26 @@ export default function DashboardScreen() {
 
     const { labels: dailyLabels, hours: dailyHours, totalHours } =
         calculateDailyWorkHours();
+
+    const screenWidth = Dimensions.get("window").width;
+
+    //number of bars
+    const numBars = dailyLabels.length;
+
+    // total width available (same as your advanced chart)
+    // ScrollView padding: 16*2=32, chartCard padding: 12*2=24 → 56 total
+    const totalWidth = screenWidth - 56;
+
+    // dynamic spacing like your MonthWiseSalesChart
+    const isManyBars = numBars > 20;
+
+    const spacing = isManyBars ? 5 : 5;
+    const barWidth = Math.max(5, Math.min(1, totalWidth / (numBars * 1.5)));
+
+    const barData = dailyLabels.map((label, index) => ({
+        value: dailyHours[index],
+        label: label,
+    }));
 
     return (
         <SafeAreaView style={[{ flex: 1 }, dynamicStyles.container]}>
@@ -530,14 +637,14 @@ export default function DashboardScreen() {
                 style={[styles.container, dynamicStyles.container]}
                 contentContainerStyle={{ paddingBottom: 82 }}
             >
-                <View style={styles.header}>
+                {/* <View style={styles.header}>
                     <Text style={[styles.title, dynamicStyles.title]}>
                         {displayName && `Welcome Back, ${displayName} 👋`}
                     </Text>
                     <Text style={[styles.subtitle, dynamicStyles.subtitle]}>
                         Here's what's happening with your work profile today.
                     </Text>
-                </View>
+                </View> */}
 
                 <View style={{ marginVertical: 16 }}>
                     <MonthYearDropdown
@@ -581,42 +688,61 @@ export default function DashboardScreen() {
 
                 {/* Daily Work Hours – kept UI structure */}
                 <View style={styles.section}>
-                    <View style={styles.dailyWorkHeader}>
-                        <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>
-                            Daily Work Hours
-                        </Text>
-                        <Text style={[styles.totalHours, dynamicStyles.textMain]}>
-                            {totalHours} TOTAL HOURS
-                        </Text>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        <View style={{ alignItems: "center" }}>
-                            <LineChart
-                                data={{
-                                    labels: dailyLabels, // use as-is
-                                    datasets: [
-                                        { data: dailyHours, color: () => colors.primary, strokeWidth: 2 }
-                                    ],
-                                }}
-                                width={Math.max(screenWidth, dailyLabels.length * 40)} // dynamic width
+                    <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+                        <View style={styles.dailyWorkHeader}>
+                            <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>
+                                Daily Work Hours
+                            </Text>
+                            <Text style={[styles.totalHours, dynamicStyles.textMain]}>
+                                {totalHours} TOTAL HOURS
+                            </Text>
+                        </View>
+
+                        {/* Tooltip */}
+                        {tooltipVisible && selectedBar && (
+                            <View
+                                style={[
+                                    styles.fixedTooltip,
+                                    { borderColor: colors.primary },
+                                ]}
+                            >
+                                <Text style={styles.tooltipLabel}>
+                                    Day {selectedBar.label}
+                                </Text>
+                                <Text style={[styles.tooltipValue, { color: colors.primary }]}>
+                                    {selectedBar.value}h
+                                </Text>
+                            </View>
+                        )}
+
+                        <View style={{ overflow: "hidden" }}>
+                            <BarChart
+                                data={barData}
+                                width={totalWidth}
                                 height={180}
-                                fromZero
-                                withDots={true}
-                                withShadow={false}
-                                withVerticalLines={false}
-                                chartConfig={{
-                                    backgroundGradientFrom: colors.background,
-                                    backgroundGradientTo: colors.background,
-                                    decimalPlaces: 1,
-                                    color: () => colors.primary,
-                                    labelColor: () => colors.textSub,
-                                    propsForDots: { r: "3", strokeWidth: "2", stroke: colors.primary },
-                                    propsForBackgroundLines: { stroke: "#334155", strokeDasharray: "" },
-                                }}
-                                style={{ borderRadius: 10, marginVertical: 8 }}
+                                barWidth={barWidth}
+                                spacing={spacing}
+                                initialSpacing={1}
+                                barBorderRadius={4}
+                                labelsExtraHeight={20}
+                                xAxisLabelsHeight={20}
+                                overflowTop={30}
+                                disableScroll
+                                frontColor={colors.primary}
+                                yAxisLabelWidth={15}
+                                formatYLabel={formatYLabel}
+                                xAxisLabelTextStyle={{ fontSize: 7, color: colors.textSub }}
+                                yAxisTextStyle={{ fontSize: 8, color: "#555" }}
+                                xAxisColor="#d1d5db"
+                                yAxisThickness={0}
+                                xAxisThickness={1}
+                                rulesType="solid"
+                                noOfSections={5}
+                                isAnimated={false}
+                                onPress={(item: any, index: number) => showBarTooltip(item, index)}
                             />
                         </View>
-                    </ScrollView>
+                    </View>
                 </View>
 
                 {/* Shift Stats – kept UI */}
@@ -815,8 +941,8 @@ export default function DashboardScreen() {
                 <DashboardCard
                     title={`Holidays In (${cardTitleSuffix})`}
                     seeMore
-                    onSeeMorePress={() => router.push("/screens/holidays")}
-                >                    {/* Header Row */}
+                    onSeeMorePress={() => router.push("/screens/employee_holidays")}
+                >
                     <View style={[styles.tableRow, { borderBottomWidth: 2, borderBottomColor: colors.primary }]}>
                         <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Date</Text>
                         <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Holiday</Text>
@@ -1082,6 +1208,44 @@ const styles = StyleSheet.create({
     totalHours: {
         fontSize: 14,
         fontWeight: "700",
+    },
+
+    fixedTooltip: {
+        position: "absolute",
+        top: 100,
+        alignSelf: "center",
+        width: 130,
+        zIndex: 10,
+        backgroundColor: "#fff",
+        padding: 10,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        alignItems: "center",
+        elevation: 4,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+    },
+
+    tooltipLabel: {
+        fontSize: 11,
+        color: "#4b5563",
+    },
+
+    tooltipValue: {
+        fontSize: 14,
+        fontWeight: "700",
+        marginTop: 2,
+    },
+
+    chartCard: {
+        borderRadius: 12,
+        padding: 12,
+        marginTop: 4,
+        width: "100%",
+        alignSelf: "stretch",
+        overflow: "hidden",
     },
 
 });

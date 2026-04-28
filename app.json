@@ -8,8 +8,19 @@
     "scheme": "hrmapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "permissions": [
+      "location",
+      "locationBackground"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to track employee attendance",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to track attendance in the background",
+        "UIBackgroundModes": [
+          "location"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +29,12 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.mannan_app_developer.hrm_app"
+      "package": "com.dnt.hrm",
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "output": "static",
@@ -26,6 +42,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-location",
       [
         "expo-splash-screen",
         {
@@ -55,7 +72,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "16752f20-7530-458c-9913-6d1f70cb78f9"
+        "projectId": "0a2329d7-5bfa-48cf-a548-e64d2b9a1e95"
       }
     }
   }

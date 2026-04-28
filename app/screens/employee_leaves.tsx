@@ -14,7 +14,9 @@ import {
     View,
 } from 'react-native';
 import EmployeeBottomTabBar from '../components/EmployeeBottomTabBar';
+import EmployeeHeader from '../components/EmployeeHeader';
 import { LeaveModal } from '../components/LeaveModal';
+import SideMenu from '../components/SideMenu';
 import { useTheme } from '../contexts/ThemeContext';
 import { fetchLeaveRequests } from '../services/leave';
 
@@ -77,6 +79,7 @@ const getTodayDate = () => {
 export default function EmployeeLeavesScreen() {
     const router = useRouter();
     const { isDark, colors } = useTheme();
+    const [isMenuVisible, setMenuVisible] = useState(false);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const today = getTodayDate();
 
@@ -211,17 +214,13 @@ export default function EmployeeLeavesScreen() {
         <View style={[styles.container, dynamicStyles.container]}>
             <StatusBar style={isDark ? 'light' : 'dark'} />
             <SafeAreaView style={styles.safeArea}>
-                {/* Header */}
-                <View style={[styles.header, dynamicStyles.header]}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
-                        <MaterialIcons name="arrow-back" size={24} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <Text style={[styles.headerTitle, dynamicStyles.headerTitle]}>My Leaves</Text>
-                    <TouchableOpacity style={[styles.notificationButton, dynamicStyles.notificationButton]}>
-                        <MaterialIcons name="notifications" size={24} color={colors.textMain} />
-                        <View style={styles.notificationBadge} />
-                    </TouchableOpacity>
-                </View>
+                <EmployeeHeader
+                    title="My Leaves"
+                    user={null}
+                    onMenuPress={() => setMenuVisible(true)}
+                    onNotificationPress={() => console.log("Notifications pressed")}
+                />
+                <SideMenu visible={isMenuVisible} onClose={() => setMenuVisible(false)} />
 
                 <ScrollView
                     style={styles.scrollView}

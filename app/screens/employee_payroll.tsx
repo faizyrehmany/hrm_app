@@ -14,7 +14,9 @@ import {
     View,
 } from 'react-native';
 import EmployeeBottomTabBar from '../components/EmployeeBottomTabBar';
+import EmployeeHeader from '../components/EmployeeHeader';
 import PayrollHistoryRecords from '../components/PayrollHistoryRecords';
+import SideMenu from '../components/SideMenu';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatMoney } from '../services/payroll';
 import { fetchPayrollRecords, Payslip } from '../services/payrollHistory';
@@ -25,6 +27,7 @@ export default function EmployeePayrollScreen() {
 
     const dynamicStyles = createDynamicStyles(colors, isDark);
 
+    const [isMenuVisible, setMenuVisible] = useState(false);
     const [slips, setSlips] = useState<Payslip[]>([]);
 
     useEffect(() => {
@@ -54,16 +57,13 @@ export default function EmployeePayrollScreen() {
         <View style={[styles.container, dynamicStyles.container]}>
             <StatusBar style={isDark ? 'light' : 'dark'} />
             <SafeAreaView style={styles.safeArea}>
-                {/* Header */}
-                <View style={[styles.header, dynamicStyles.header]}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
-                        <MaterialIcons name="arrow-back" size={24} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <Text style={[styles.headerTitle, dynamicStyles.headerTitle]}>My Payroll</Text>
-                    <TouchableOpacity style={styles.iconButton}>
-                        <MaterialIcons name="settings" size={24} color={colors.textMain} />
-                    </TouchableOpacity>
-                </View>
+                <EmployeeHeader
+                    title="My Payroll"
+                    user={null}
+                    onMenuPress={() => setMenuVisible(true)}
+                    onNotificationPress={() => console.log("Notifications pressed")}
+                />
+                <SideMenu visible={isMenuVisible} onClose={() => setMenuVisible(false)} />
 
                 <ScrollView
                     style={styles.scrollView}

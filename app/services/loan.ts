@@ -32,8 +32,8 @@ export const getLoans = async (): Promise<Loan[]> => {
 
     // handle empty response
     const text = await res.text();
-    console.log("Loan API status:", res.status);
-    console.log("Loan API raw response:", text);
+    // console.log("Loan API status:", res.status);
+    // console.log("Loan API raw response:", text);
 
     if (!res.ok) {
         throw new Error(text || 'Failed to fetch loans');

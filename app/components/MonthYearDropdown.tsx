@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Dropdown } from "react-native-element-dropdown";
+import { useTheme } from '../contexts/ThemeContext';
 
 interface MonthYearDropdownProps {
     selectedMonth: string;
@@ -24,10 +25,12 @@ const MonthYearDropdown: React.FC<MonthYearDropdownProps> = ({
     months = defaultMonths,
     years
 }) => {
+    const { isDark, colors } = useTheme();
     const currentYear = new Date().getFullYear();
     const defaultYears = ["All", ...Array.from({ length: 5 }, (_, i) => (currentYear - i).toString())];
 
     const yearList = years || defaultYears;
+    const selectedTextColor = isDark ? '#f0e8e8' : '#000000';
 
     return (
         <View style={styles.row}>
@@ -41,7 +44,7 @@ const MonthYearDropdown: React.FC<MonthYearDropdownProps> = ({
                 onChange={item => onMonthChange(item.value)}
                 placeholder="Select Month"
                 placeholderStyle={{ color: '#999' }}
-                selectedTextStyle={{ color: '#f0e8e8' }}
+                selectedTextStyle={{ color: selectedTextColor }}
             />
 
             {/* Year Dropdown */}
@@ -54,7 +57,7 @@ const MonthYearDropdown: React.FC<MonthYearDropdownProps> = ({
                 onChange={item => onYearChange(item.value)}
                 placeholder="Select Year"
                 placeholderStyle={{ color: '#999' }}
-                selectedTextStyle={{ color: '#f0e8e8' }}
+                selectedTextStyle={{ color: selectedTextColor }}
             />
         </View>
     );

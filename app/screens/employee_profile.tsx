@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Image,
-
     ScrollView,
     StyleSheet,
     Switch,
@@ -79,7 +78,11 @@ export default function EmployeeProfileScreen() {
                         </TouchableOpacity>
                     </View>
                     <Text style={[styles.profileName, dynamicStyles.profileName]}>
-                        {user?.username || 'Alex Johnson'}
+                        {user?.fullName
+                            ? user.fullName
+                            : user?.firstName || user?.lastName
+                                ? `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim()
+                                : user?.username || 'Employee'}
                     </Text>
                     <Text style={[styles.profileRole, dynamicStyles.profileRole]}>
                         Senior Developer

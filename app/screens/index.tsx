@@ -25,7 +25,9 @@ import { loginUser } from '../services/auth'; // Changed from require to import
 const { width, height } = Dimensions.get('window');
 
 import { jwtDecode } from "jwt-decode";
+import { startBackgroundTracking } from '../components/backgroundLocation';
 import { CustomToast } from '../components/CustomToast';
+import { startTracking } from '../components/LocationTrack';
 import SplashScreen from '../components/SplashScreen';
 import { SessionManager } from '../services/SessionManager';
 
@@ -38,6 +40,9 @@ export default function LoginScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isAppReady, setIsAppReady] = useState(false);
+
+
+
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -202,7 +207,7 @@ export default function LoginScreen() {
                           id: result.data.employeeId,
                           employeeId: result.data.employeeId,
                           role: userRole,
-                          enrollNo: enrollNo, // 🔥 Save enrollNo for attendance
+                          enrollNo: enrollNo,
                           departmentName: result.data?.departmentName || null,
                         },
                         token
@@ -210,12 +215,14 @@ export default function LoginScreen() {
 
                       console.log("Session saved successfully");
 
-                      // ✅ Redirect based on role
+                      await startTracking();
+
+                      await startBackgroundTracking();
+
+                      // THEN navigate
                       if (userRole.toLowerCase() === "admin") {
-                        console.log("Admin logged in");
                         router.replace("/screens/dashboard");
                       } else {
-                        console.log("Employee logged in");
                         router.replace("/screens/employee_dashboard");
                       }
                     } else {

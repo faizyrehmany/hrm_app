@@ -1,74 +1,25 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
     Dimensions,
-    Image,
     StatusBar as NativeStatusBar,
     Platform,
     SafeAreaView,
     ScrollView,
     StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import AttendanceTable from '../components/AttendanceTable';
 import EmployeeBottomTabBar from '../components/EmployeeBottomTabBar';
+import EmployeeHeader from '../components/EmployeeHeader';
+import SideMenu from '../components/SideMenu';
 import { useTheme } from '../contexts/ThemeContext';
 import { AttendanceManager, SessionManager, User } from '../services/SessionManager';
 
 const { width } = Dimensions.get('window');
 
-// Mock attendance history data
-const ATTENDANCE_HISTORY = [
-    {
-        id: 1,
-        date: '24',
-        month: 'Oct',
-        checkIn: '09:00 AM',
-        checkOut: '--:-- PM',
-        status: 'Present',
-        statusColor: '#10b981',
-        duration: '8h 58m',
-        borderColor: '#10b981',
-    },
-    {
-        id: 2,
-        date: '23',
-        month: 'Oct',
-        checkIn: '09:15 AM',
-        checkOut: '06:15 PM',
-        status: 'Late In',
-        statusColor: '#f59e0b',
-        duration: '9h 00m',
-        borderColor: '#f59e0b',
-    },
-    {
-        id: 3,
-        date: '22',
-        month: 'Oct',
-        checkIn: null,
-        checkOut: null,
-        status: 'Absent',
-        statusColor: '#ef4444',
-        duration: '0h 00m',
-        borderColor: '#ef4444',
-    },
-    {
-        id: 4,
-        date: '21',
-        month: 'Oct',
-        checkIn: '08:55 AM',
-        checkOut: '06:00 PM',
-        status: 'On Time',
-        statusColor: '#10b981',
-        duration: '9h 05m',
-        borderColor: '#10b981',
-        opacity: 0.6,
-    },
-];
+
 
 // Office hours: 9 AM - 6 PM
 const OFFICE_START_HOUR = 9;
@@ -86,6 +37,7 @@ export default function AttendanceScreen() {
     const [clockIn, setClockIn] = useState<string>('--:--');
     const [estimatedOut, setEstimatedOut] = useState<string>('06:00 PM');
     const [logs, setLogs] = useState<any[]>([]);
+    const [isMenuVisible, setMenuVisible] = useState(false);
 
     useEffect(() => {
         loadUser();
@@ -202,24 +154,13 @@ export default function AttendanceScreen() {
             <StatusBar style={isDark ? 'light' : 'dark'} />
             <SafeAreaView style={styles.safeArea}>
                 {/* Header */}
-                <View style={[styles.header, dynamicStyles.header]}>
-                    <View style={styles.headerLeft}>
-                        <View style={[styles.avatarContainer, dynamicStyles.avatarContainer]}>
-                            <Image
-                                source={{
-                                    uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD8yKquwRvRIdB-kUv_8VO-aBZU4ZzT2CV6rUeLtcfpXlvgYrkr6iwLC4-VDIeqnbunuK_Rd1IToi_6SkomNL0snHNzoUhe4JkZL3vkmvhLP_At2daPdi3pnE1qnp4Pj7VN3hzPZfDYJZ8J8yN8xlvQcD77H3TS7IJdHDTo_A1c76BeU6jRBtjRtrJO6qOK_bVC6g6P0H_ux2oGmF9irb2Ywwt6Sgb3JlRR7LQ2ArwnJbIqZiMBGzndrDnQBtVsxM3otKO_af6jpNay',
-                                }}
-                                style={styles.avatar}
-                            />
-                        </View>
-                        <Text style={[styles.headerTitle, dynamicStyles.headerTitle]}>Attendance & Time</Text>
-                    </View>
-                    <TouchableOpacity style={[styles.notificationButton, dynamicStyles.notificationButton]}>
-                        <MaterialIcons name="notifications" size={24} color={colors.textMain} />
-                        <View style={styles.notificationBadge} />
-                    </TouchableOpacity>
-                </View>
-
+                <EmployeeHeader
+                    user={user}
+                    title="Attendance & Time"
+                    onMenuPress={() => setMenuVisible(true)}
+                    onNotificationPress={() => console.log("Notifications pressed")}
+                />
+                <SideMenu visible={isMenuVisible} onClose={() => setMenuVisible(false)} />
                 <ScrollView
                     style={styles.scrollView}
                     contentContainerStyle={styles.scrollContent}
@@ -240,8 +181,8 @@ export default function AttendanceScreen() {
                             <View style={styles.timerContainer}>
                                 <View style={[styles.timerRing, dynamicStyles.timerRing]} />
                                 <View style={[styles.timerCircle, dynamicStyles.timerCircle]}> */}
-                                    {/* Timer Digits */}
-                                    {/* <View style={styles.timerDigits}>
+                        {/* Timer Digits */}
+                        {/* <View style={styles.timerDigits}>
                                         <View style={styles.timerUnit}>
                                             <Text style={[styles.timerValue, dynamicStyles.timerValue]}>{String(hours).padStart(2, '0')}</Text>
                                             <Text style={[styles.timerLabel, dynamicStyles.timerLabel]}>Hrs</Text>
@@ -258,8 +199,8 @@ export default function AttendanceScreen() {
                                         </View>
                                     </View> */}
 
-                                    {/* Status Text */}
-                                    {/* <View style={[styles.statusBadge, { backgroundColor: `${STATIC_COLORS.emerald}20` }]}>
+                        {/* Status Text */}
+                        {/* <View style={[styles.statusBadge, { backgroundColor: `${STATIC_COLORS.emerald}20` }]}>
                                         <View style={[styles.statusDot, { backgroundColor: STATIC_COLORS.emerald }]} />
                                         <Text style={[styles.statusText, { color: STATIC_COLORS.emerald }]}>ON SHIFT</Text>
                                     </View>
@@ -352,7 +293,7 @@ export default function AttendanceScreen() {
                             </TouchableOpacity>
                         </View> */}
 
-                        {/* <View style={styles.historyList}>
+                    {/* <View style={styles.historyList}>
                             {ATTENDANCE_HISTORY.map((item) => (
                                 <View
                                     key={item.id}
@@ -413,6 +354,10 @@ export default function AttendanceScreen() {
                 {/* Employee Bottom Tab Bar */}
                 <EmployeeBottomTabBar activeTab="attendance" />
             </SafeAreaView>
+            <SideMenu
+                visible={isMenuVisible}
+                onClose={() => setMenuVisible(false)}
+            />
         </View>
     );
 }

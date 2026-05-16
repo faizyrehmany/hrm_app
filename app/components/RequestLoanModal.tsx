@@ -23,12 +23,9 @@ interface LoanModalProps {
 
 export const LoanModal = ({ isVisible, onClose, onSubmit }: LoanModalProps) => {
     const [startDate, setStartDate] = useState<Date | undefined>();
-    const [endDate, setEndDate] = useState<Date | undefined>();
     const [showStartPicker, setShowStartPicker] = useState(false);
-    const [showEndPicker, setShowEndPicker] = useState(false);
     const [totalAmount, setTotalAmount] = useState('');
     const [monthlyInstallment, setMonthlyInstallment] = useState('');
-    const [remainingAmount, setRemainingAmount] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
 
@@ -52,23 +49,14 @@ export const LoanModal = ({ isVisible, onClose, onSubmit }: LoanModalProps) => {
                 Alert.alert('Validation Error', 'Please enter monthly installment.');
                 return;
             }
-            if (!remainingAmount?.trim()) {
-                Alert.alert('Validation Error', 'Please enter remaining amount.');
-                return;
-            }
             if (!startDate) {
                 Alert.alert('Validation Error', 'Please select a start date.');
-                return;
-            }
-            if (!endDate) {
-                Alert.alert('Validation Error', 'Please select an end date.');
                 return;
             }
 
             // Parse numbers
             const parsedTotal = Number(totalAmount);
             const parsedInstallment = Number(monthlyInstallment);
-            const parsedRemaining = Number(remainingAmount);
 
             if (isNaN(parsedTotal) || parsedTotal <= 0) {
                 Alert.alert('Validation Error', 'Please enter a valid total amount.');
@@ -78,20 +66,17 @@ export const LoanModal = ({ isVisible, onClose, onSubmit }: LoanModalProps) => {
                 Alert.alert('Validation Error', 'Please enter a valid monthly installment.');
                 return;
             }
-            if (isNaN(parsedRemaining) || parsedRemaining < 0) {
-                Alert.alert('Validation Error', 'Please enter a valid remaining amount.');
-                return;
-            }
 
             // Prepare payload
-            const payload = {
+            const payload: any = {
                 employeeId: user.employeeId,
                 totalAmount: parsedTotal,
                 monthlyInstallment: parsedInstallment,
-                remainingAmount: parsedRemaining,
+                remainingAmount: parsedTotal, // Defaults to total amount
                 startDate: startDate.toISOString(),
-                endDate: endDate.toISOString(),
+                endDate: startDate.toISOString(), // Defaults to start date
                 status: 'pending',
+                isActive: true,
             };
 
             console.log("Submitting Loan:", payload);
@@ -105,9 +90,7 @@ export const LoanModal = ({ isVisible, onClose, onSubmit }: LoanModalProps) => {
             // Reset form if needed
             setTotalAmount('');
             setMonthlyInstallment('');
-            setRemainingAmount('');
             setStartDate(undefined);
-            setEndDate(undefined);
 
             onClose();
             if (onSubmit) onSubmit(); // refresh parent table
@@ -136,10 +119,17 @@ export const LoanModal = ({ isVisible, onClose, onSubmit }: LoanModalProps) => {
                             style={styles.input}
                             placeholder="50000"
                             placeholderTextColor="#64748b"
-
                             keyboardType="numeric"
+                            selectionColor="#2563eb"
+                            cursorColor="#2563eb"
                             value={totalAmount}
                             onChangeText={setTotalAmount}
+                            autoComplete="off"
+                            textContentType="none"
+                            importantForAutofill="no"
+                            autoCorrect={false}
+
+                            underlineColorAndroid="transparent"
                         />
                         <Text style={styles.label}>Monthly Installment</Text>
 
@@ -151,28 +141,13 @@ export const LoanModal = ({ isVisible, onClose, onSubmit }: LoanModalProps) => {
                             keyboardType="numeric"
                             value={monthlyInstallment}
                             onChangeText={setMonthlyInstallment}
+                            autoComplete="off"
+                            textContentType="none"
                         />
-                        <Text style={styles.label}>Remaining Amount</Text>
-
-                        <TextInput
-                            style={styles.input}
-                            placeholder="50000"
-                            placeholderTextColor="#64748b"
-                            keyboardType="numeric"
-                            value={remainingAmount}
-                            onChangeText={setRemainingAmount}
-                        />
-
                         <Text style={styles.label}>Start Date</Text>
                         <TouchableOpacity style={styles.input} onPress={() => setShowStartPicker(true)}>
                             <Text style={styles.inputText}>
                                 {startDate ? formatDate(startDate) : 'Select Start Date'}
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.input} onPress={() => setShowEndPicker(true)}>
-                            <Text style={styles.inputText}>
-                                {endDate ? formatDate(endDate) : 'Select End Date'}
                             </Text>
                         </TouchableOpacity>
                     </ScrollView>
@@ -203,17 +178,6 @@ export const LoanModal = ({ isVisible, onClose, onSubmit }: LoanModalProps) => {
                     }}
                 />
             )}
-            {showEndPicker && (
-                <DateTimePicker
-                    value={endDate || new Date()}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                    onChange={(e, d) => {
-                        setShowEndPicker(Platform.OS === 'ios');
-                        if (d) setEndDate(d);
-                    }}
-                />
-            )}
         </Modal>
     );
 };
@@ -227,8 +191,18 @@ const styles = StyleSheet.create({
     closeIcon: { color: '#94a3b8', fontSize: 18 },
     body: { padding: 20, maxHeight: 450 },
     label: { color: '#f1f5f9', marginBottom: 8 },
-    input: { backgroundColor: '#020617', borderWidth: 1, borderColor: '#1e293b', borderRadius: 8, padding: 12, color: '#fff', marginBottom: 16 },
-    footer: { flexDirection: 'row', justifyContent: 'flex-end', padding: 16, gap: 12 },
+    input: {
+        backgroundColor: '#020617',
+        borderWidth: 1,
+        borderColor: '#1e293b',
+        borderRadius: 8,
+        padding: 12,
+        color: '#fff',
+        marginBottom: 16,
+
+        // Android fixes
+        elevation: 0,
+    }, footer: { flexDirection: 'row', justifyContent: 'flex-end', padding: 16, gap: 12 },
     cancelButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8, borderWidth: 1, borderColor: '#334155' },
     cancelText: { color: '#fff' },
     submitButton: { backgroundColor: '#2563eb', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },

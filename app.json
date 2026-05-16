@@ -4,7 +4,7 @@
     "slug": "hrm_app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon/app_icon_3.jpg",
+    "icon": "./assets/icon/new_logo.png",
     "scheme": "hrmapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -24,29 +24,39 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon/app_icon_3.jpg",
+        "foregroundImage": "./assets/icon/new_logo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.dreams.hrm",
+      "package": "com.dnthrm.hrm",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION"
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/new_logo.png"
     },
     "plugins": [
       "expo-router",
-      "expo-location",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUseUsageDescription": "Allow Dreams HRM to access your location in the background to track attendance.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      "./plugins/withForegroundService",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/new_logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",

@@ -1,8 +1,9 @@
 import * as Battery from "expo-battery";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
+import { Platform } from "react-native";
 import { SessionManager } from "../services/SessionManager";
-import { sendLocation } from "../services/location";
+import { getDistance, sendLocation } from "../services/location";
 
 const LOCATION_TASK = "background-location-task";
 
@@ -23,10 +24,9 @@ const MIN_SEND_INTERVAL = 60_000; // 1 minute
 const isSameLocation = (a: any, b: any) => {
     if (!a || !b) return false;
 
-    return (
-        Math.round(a.latitude * 100000) === Math.round(b.latitude * 100000) &&
-        Math.round(a.longitude * 100000) === Math.round(b.longitude * 100000)
-    );
+    // Use distance-based check with 15 meter threshold
+    const distance = getDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+    return distance < 15;
 };
 
 // ─────────────────────────────────────────────
@@ -91,7 +91,12 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: any) => {
         const tooSoon = now - lastSentTime < MIN_SEND_INTERVAL;
         const sameLocation = isSameLocation(lastSentLocation, newLoc);
 
-        if (tooSoon || sameLocation) return;
+        if (tooSoon || sameLocation) {
+            if (sameLocation) {
+                console.log("📍 Background: Location unchanged (within 15m), skipping update");
+            }
+            return;
+        }
 
         console.log("📤 Background Location Sent:", payload);
 
@@ -108,13 +113,22 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: any) => {
 // START BACKGROUND TRACKING
 // ─────────────────────────────────────────────
 export const startBackgroundTracking = async () => {
-    const { status } = await Location.requestBackgroundPermissionsAsync();
+    // ❌ Background tracking unsupported on web
+    if (Platform.OS === "web") {
+        console.log("Background tracking not supported on web");
+        return;
+    }
+
+    const { status } =
+        await Location.requestBackgroundPermissionsAsync();
 
     if (status !== "granted") return;
 
-    const started = await Location.hasStartedLocationUpdatesAsync(
-        LOCATION_TASK
-    );
+    // safer check
+    const started =
+        typeof Location.hasStartedLocationUpdatesAsync === "function"
+            ? await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK)
+            : false;
 
     if (started) return;
 

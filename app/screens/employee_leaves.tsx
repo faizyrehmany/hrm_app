@@ -18,7 +18,10 @@ import EmployeeHeader from '../components/EmployeeHeader';
 import { LeaveModal } from '../components/LeaveModal';
 import SideMenu from '../components/SideMenu';
 import { useTheme } from '../contexts/ThemeContext';
+import { getAttendanceLogs } from '../services/attendance';
+import { getHolidays } from '../services/holidays';
 import { fetchLeaveRequests } from '../services/leave';
+import { SessionManager } from '../services/SessionManager';
 
 const { width } = Dimensions.get('window');
 
@@ -34,37 +37,6 @@ const LEAVE_BALANCE = [
 
 // Mock leave data - in real app, this would come from API
 // Format: 'YYYY-MM-DD': 'status'
-const getMockLeaveData = (year: number, month: number): { [key: string]: string } => {
-    const monthStr = String(month + 1).padStart(2, '0');
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
-    const currentDate = today.getDate();
-
-
-    // Only add mock data for current month for demo purposes
-    if (year === currentYear && month === currentMonth) {
-        return {
-            [`${year}-${monthStr}-${String(Math.min(currentDate + 2, 28)).padStart(2, '0')}`]: 'approved',
-            [`${year}-${monthStr}-${String(Math.min(currentDate + 3, 28)).padStart(2, '0')}`]: 'approved',
-            [`${year}-${monthStr}-${String(Math.min(currentDate + 5, 28)).padStart(2, '0')}`]: 'pending',
-            [`${year}-${monthStr}-${String(Math.min(currentDate + 8, 28)).padStart(2, '0')}`]: 'holiday',
-        };
-    }
-
-    // For other months, you can add sample data
-    // For example, for January 2024:
-    if (year === 2024 && month === 0) {
-        return {
-            '2024-01-04': 'approved',
-            '2024-01-05': 'approved',
-            '2024-01-12': 'pending',
-            '2024-01-15': 'holiday',
-        };
-    }
-
-    return {};
-};
 
 // Get current date for comparison
 const getTodayDate = () => {
@@ -74,6 +46,14 @@ const getTodayDate = () => {
         month: today.getMonth(),
         date: today.getDate(),
     };
+};
+
+const parseLocalDate = (dateString: string): Date => {
+    if (!dateString) return new Date();
+    const [datePart, timePart = '00:00:00'] = dateString.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours = 0, minutes = 0, seconds = 0] = (timePart.split('.')[0] || '').split(':').map(Number);
+    return new Date(year, month - 1, day, hours, minutes, seconds);
 };
 
 export default function EmployeeLeavesScreen() {
@@ -86,17 +66,67 @@ export default function EmployeeLeavesScreen() {
     const [recentApplications, setRecentApplications] = useState<any[]>([]);
     const [isLeaveModalVisible, setLeaveModalVisible] = useState(false);
     const [showAllApplications, setShowAllApplications] = useState(false);
+    const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
+    const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+    const [userEnrollNo, setUserEnrollNo] = useState<string | null>(null);
+    const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
+    const [selectedLeaveDate, setSelectedLeaveDate] = useState<Date | null>(null);
 
     useEffect(() => {
         fetchLeaveRequests().then((applications) => {
             setRecentApplications(applications);
+            setLeaveRequests(applications);
         });
+
+        const loadUserAndAttendance = async () => {
+            try {
+                const user = await SessionManager.getUser();
+                if (!user?.enrollNo) return;
+                setUserEnrollNo(user.enrollNo);
+                const logs = await getAttendanceLogs(user.enrollNo);
+                setAttendanceLogs(logs);
+            } catch (error) {
+                console.error('Failed to load attendance for leave calendar:', error);
+            }
+        };
+
+        const loadHolidays = async () => {
+            try {
+                const today = new Date();
+                const holidayResponse = await getHolidays(today.getFullYear());
+                if (holidayResponse.success && Array.isArray(holidayResponse.data)) {
+                    const holidaySet = new Set(
+                        holidayResponse.data.map((holiday: any) => {
+                            const dt = parseLocalDate(holiday.date);
+                            return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                        })
+                    );
+                    setHolidayDates(holidaySet);
+                }
+            } catch (error) {
+                console.error('Failed to load holiday dates for leave screen:', error);
+            }
+        };
+
+        loadUserAndAttendance();
+        loadHolidays();
     }, []);
 
     const dynamicStyles = createDynamicStyles(colors, isDark);
 
     const formatMonthYear = (date: Date) => {
         return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    };
+
+    const formatDateKey = (date: Date) =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+    const isWeekend = (date: Date) => date.getDay() === 0 || date.getDay() === 6;
+
+    const isBeforeToday = (date: Date) => {
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+        return date.getTime() < todayDate.getTime();
     };
 
     const handlePreviousMonth = () => {
@@ -123,8 +153,23 @@ export default function EmployeeLeavesScreen() {
         // Get number of days in the month
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-        // Get mock leave data for this month
-        const mockLeaveData = getMockLeaveData(year, month);
+        const getLeaveStatusForDate = (currentDate: Date) => {
+            const filteredLeaves = userEnrollNo
+                ? leaveRequests.filter((leave) => leave.enrollNo === userEnrollNo)
+                : leaveRequests;
+
+            for (const leave of filteredLeaves) {
+                const start = parseLocalDate(leave.rawStartDate || leave.startDate);
+                const end = parseLocalDate(leave.rawEndDate || leave.endDate);
+                if (start && end && currentDate.getTime() >= start.getTime() && currentDate.getTime() <= end.getTime()) {
+                    const lowerStatus = (leave.status || '').toLowerCase();
+                    if (lowerStatus === 'pending') return 'pending';
+                    if (lowerStatus === 'approved') return 'approved';
+                    return null;
+                }
+            }
+            return null;
+        };
 
         // Create array for calendar
         const calendarDays: Array<{ day: number | null; status: string }> = [];
@@ -139,6 +184,7 @@ export default function EmployeeLeavesScreen() {
         // Add all days of the month
         for (let day = 1; day <= daysInMonth; day++) {
             const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const currentDate = new Date(year, month, day);
 
             // Check if it's today
             const isToday =
@@ -146,8 +192,20 @@ export default function EmployeeLeavesScreen() {
                 month === today.month &&
                 day === today.date;
 
-            // Get status from mock data or default to 'normal'
-            let status = mockLeaveData[dateKey] || 'normal';
+            let status = getLeaveStatusForDate(currentDate) || 'normal';
+            const isHoliday = holidayDates.has(dateKey) || currentDate.getDay() === 0;
+            if (isHoliday) {
+                status = 'holiday';
+            }
+
+            const dayLogs = attendanceLogs.filter(
+                (log) => parseLocalDate(log.logTime).toDateString() === currentDate.toDateString()
+            );
+            const hasAttendance = dayLogs.length > 0;
+
+            if (status === 'normal' && isBeforeToday(currentDate) && !isHoliday && !hasAttendance) {
+                status = 'absent';
+            }
 
             // Override with 'today' if it's today
             if (isToday) {
@@ -172,6 +230,10 @@ export default function EmployeeLeavesScreen() {
     };
 
     const calendarDays = generateCalendarDays();
+
+    const absentDates = calendarDays
+        .filter((item) => item.status === 'absent' && item.day !== null)
+        .map((item) => new Date(currentMonth.getFullYear(), currentMonth.getMonth(), item.day as number));
 
     const getDayStatusStyle = (status: string) => {
         switch (status) {
@@ -199,6 +261,12 @@ export default function EmployeeLeavesScreen() {
                     color: colors.primary,
                     borderWidth: 2,
                     borderColor: colors.primary,
+                    borderRadius: 20,
+                };
+            case 'absent':
+                return {
+                    backgroundColor: '#ef4444',
+                    color: '#ffffff',
                     borderRadius: 20,
                 };
             default:
@@ -275,11 +343,10 @@ export default function EmployeeLeavesScreen() {
                     </View> */}
 
                     {/* Calendar Section */}
-                    {/* <View style={styles.calendarSection}>
+                    <View style={styles.calendarSection}>
                         <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Leave Calendar</Text>
-                        <View style={[styles.calendarCard, dynamicStyles.calendarCard]}> */}
-                    {/* Month Navigator */}
-                    {/* <View style={styles.monthNavigator}>
+                        <View style={[styles.calendarCard, dynamicStyles.calendarCard]}>
+                            <View style={styles.monthNavigator}>
                                 <TouchableOpacity
                                     style={[styles.navButton, dynamicStyles.navButton]}
                                     onPress={handlePreviousMonth}
@@ -293,33 +360,26 @@ export default function EmployeeLeavesScreen() {
                                 >
                                     <MaterialIcons name="chevron-right" size={20} color={colors.textSub} />
                                 </TouchableOpacity>
-                            </View> */}
+                            </View>
 
-                    {/* Days Header */}
-                    {/* <View style={styles.daysHeader}>
+                            <View style={styles.daysHeader}>
                                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
                                     <Text key={index} style={[styles.dayHeader, dynamicStyles.dayHeader]}>
                                         {day}
                                     </Text>
                                 ))}
-                            </View> */}
+                            </View>
 
-                    {/* Calendar Grid */}
-                    {/* <View style={styles.calendarGrid}> */}
-                    {/* Days */}
-                    {/* {calendarDays.map((item, index) => {
-                                    // Render empty slot
+                            <View style={styles.calendarGrid}>
+                                {calendarDays.map((item, index) => {
                                     if (item.day === null) {
-                                        return (
-                                            <View
-                                                key={`empty-${index}`}
-                                                style={styles.calendarDayEmpty}
-                                            />
-                                        );
-                                    } */}
+                                        return <View key={`empty-${index}`} style={styles.calendarDayEmpty} />;
+                                    }
 
-                    {/* const dayStyle = getDayStatusStyle(item.status);
-                                    const isHighlighted = item.status === 'approved' || item.status === 'pending' || item.status === 'holiday' || item.status === 'today';
+                                    const dayStyle = getDayStatusStyle(item.status);
+                                    const isHighlighted = ['approved', 'pending', 'holiday', 'today', 'absent'].includes(item.status);
+                                    const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), item.day as number);
+
                                     return (
                                         <TouchableOpacity
                                             key={`day-${item.day}-${index}`}
@@ -331,6 +391,12 @@ export default function EmployeeLeavesScreen() {
                                                     borderColor: item.status === 'today' ? dayStyle.borderColor : 'transparent',
                                                 },
                                             ]}
+                                            onPress={() => {
+                                                if (item.status === 'absent') {
+                                                    setSelectedLeaveDate(dateObj);
+                                                    setLeaveModalVisible(true);
+                                                }
+                                            }}
                                         >
                                             <Text
                                                 style={[
@@ -346,25 +412,28 @@ export default function EmployeeLeavesScreen() {
                                         </TouchableOpacity>
                                     );
                                 })}
-                            </View> */}
+                            </View>
 
-                    {/* Legend */}
-                    {/* <View style={styles.legend}>
+                            <View style={styles.legend}>
                                 <View style={styles.legendItem}>
-                                    <View style={[styles.legendDot, { backgroundColor: STATIC_COLORS.emerald }]} />
+                                    <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
                                     <Text style={[styles.legendText, dynamicStyles.legendText]}>Approved</Text>
                                 </View>
                                 <View style={styles.legendItem}>
-                                    <View style={[styles.legendDot, { backgroundColor: STATIC_COLORS.amber }]} />
+                                    <View style={[styles.legendDot, { backgroundColor: '#fbbf24' }]} />
                                     <Text style={[styles.legendText, dynamicStyles.legendText]}>Pending</Text>
                                 </View>
                                 <View style={styles.legendItem}>
                                     <View style={[styles.legendDot, { backgroundColor: isDark ? '#374151' : '#cbd5e1' }]} />
                                     <Text style={[styles.legendText, dynamicStyles.legendText]}>Holiday</Text>
                                 </View>
-                            </View> */}
-                    {/* </View>
-                    </View> */}
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+                                    <Text style={[styles.legendText, dynamicStyles.legendText]}>Absent</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
 
                     {/* Recent Applications */}
                     <View style={styles.applicationsSection}>
@@ -379,9 +448,9 @@ export default function EmployeeLeavesScreen() {
                             )}
                         </View>
                         <View style={styles.applicationsList}>
-                            {(showAllApplications ? recentApplications : recentApplications.slice(0, 3)).map((app) => (
+                            {(showAllApplications ? recentApplications : recentApplications.slice(0, 3)).map((app, index) => (
                                 <View
-                                    key={app.leaveId}
+                                    key={app.leaveId || `${app.type || 'app'}-${index}`}
                                     style={[
                                         styles.applicationCard,
                                         dynamicStyles.applicationCard,
@@ -431,7 +500,12 @@ export default function EmployeeLeavesScreen() {
                 <EmployeeBottomTabBar activeTab="leaves" />
                 <LeaveModal
                     visible={isLeaveModalVisible}
-                    onClose={() => setLeaveModalVisible(false)}
+                    initialFromDate={selectedLeaveDate}
+                    initialToDate={selectedLeaveDate}
+                    onClose={() => {
+                        setLeaveModalVisible(false);
+                        setSelectedLeaveDate(null);
+                    }}
                     onSubmit={(newLeave) => {
                         const start = newLeave.startDate ? new Date(newLeave.startDate) : new Date();
                         const end = newLeave.endDate ? new Date(newLeave.endDate) : start;
@@ -703,6 +777,63 @@ const styles = StyleSheet.create({
     legendText: {
         fontSize: 12,
         fontWeight: '500',
+    },
+    absentSection: {
+        marginTop: 32,
+        paddingHorizontal: 20,
+        gap: 12,
+    },
+    absentList: {
+        gap: 12,
+    },
+    absentCard: {
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    absentCardLeft: {
+        flexDirection: 'row',
+        gap: 12,
+        alignItems: 'center',
+    },
+    absentCardDate: {
+        width: 56,
+        height: 56,
+        borderRadius: 12,
+        backgroundColor: '#fee2e2',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    absentCardDateDay: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#b91c1c',
+    },
+    absentCardDateMonth: {
+        fontSize: 12,
+        color: '#b91c1c',
+    },
+    absentCardInfo: {
+        flex: 1,
+        gap: 4,
+    },
+    absentCardTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    absentCardSubtitle: {
+        fontSize: 12,
+        color: '#6b7280',
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#64748b',
+        paddingVertical: 8,
     },
     applicationsSection: {
         marginTop: 32,

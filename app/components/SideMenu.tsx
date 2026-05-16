@@ -204,7 +204,7 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
                                 <View style={styles.onlineStatus} />
                             </View>
                             <View style={styles.userDetails}>
-                                <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textMain }}>
+                                <Text style={[styles.userRoleText, { fontSize: 18, fontWeight: '700', color: '#fff' }]}>
                                     {displayName || 'Guest User'}
                                 </Text>
                                 <Text style={styles.userRoleText}>
@@ -251,9 +251,10 @@ export default function SideMenu({ visible, onClose }: SideMenuProps) {
                                 <MenuItem icon="grading" label="Grading System" route="/screens/employee_grading" />
                                 <MenuItem icon="receipt" label="Expense Management" route="/screens/employee_expense" />
                                 <MenuItem icon="add" label="Increment" route="/screens/employee_increment" />
+                                <MenuItem icon="report" label="Complaints" route="/screens/EmployeeComplaints" />
 
                                 <View style={[styles.divider, { backgroundColor: isDark ? '#334155' : '#f1f5f9' }]} />
-                                
+
 
                                 {/* <MenuItem icon="settings" label="Settings" route="/screens/settings" /> */}
                                 <MenuItem icon="logout" label="Logout" onPress={handle} />

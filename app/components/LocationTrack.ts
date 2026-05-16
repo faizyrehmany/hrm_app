@@ -2,7 +2,7 @@ import * as Battery from "expo-battery";
 import * as Location from "expo-location";
 import { Alert, AppState, AppStateStatus, Linking } from "react-native";
 import { SessionManager } from "../services/SessionManager";
-import { sendLocation } from "../services/location";
+import { getDistance, sendLocation } from "../services/location";
 
 // ─────────────────────────────────────────────
 // STATE
@@ -68,11 +68,9 @@ const forceEnableLocation = async () => {
 const isSameLocation = (a: any, b: any) => {
     if (!a || !b) return false;
 
-    // rounding removes GPS noise (~5–10 meters)
-    return (
-        Math.round(a.latitude * 100000) === Math.round(b.latitude * 100000) &&
-        Math.round(a.longitude * 100000) === Math.round(b.longitude * 100000)
-    );
+    // Use distance-based check with 15 meter threshold
+    const distance = getDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+    return distance < 15;
 };
 
 // ─────────────────────────────────────────────
@@ -94,8 +92,15 @@ const sendCurrentLocation = async () => {
             longitude: loc.coords.longitude,
         };
 
-        // 🚫 prevent duplicate same location spam
-        if (isSameLocation(lastSentLocation, newLoc)) return;
+        // 🚫 prevent redundant updates if user hasn't moved > 15 meters
+        if (isSameLocation(lastSentLocation, newLoc)) {
+            console.log("📍 Location unchanged (within 15m), skipping API update");
+
+            // ✅ CRITICAL: Update lastReceivedTime even when skipping
+            // This prevents the watchdog from thinking GPS is dead and restarting tracking
+            lastReceivedTime = Date.now();
+            return;
+        }
 
         const battery = await Battery.getBatteryLevelAsync();
 

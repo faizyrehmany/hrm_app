@@ -64,6 +64,14 @@ export default function AddExpenseModal({
 
     const isEditMode = !!initialData;
 
+    const isFormValid =
+        title.trim() !== "" &&
+        category !== null &&
+        amount.trim() !== "" &&
+        payment !== null &&
+        vendor.trim() !== "" &&
+        attachment !== null;
+
     useEffect(() => {
         const loadCategories = async () => {
             const data = await getExpenseCategories();
@@ -202,6 +210,11 @@ export default function AddExpenseModal({
     }, [initialData]);
 
     const handleSubmit = async () => {
+        if (!attachment) {
+            Alert.alert("Error", "Please attach a file (Receipt/Invoice) to proceed.");
+            return;
+        }
+
         const user = await SessionManager.getUser();
 
         try {
@@ -369,7 +382,7 @@ export default function AddExpenseModal({
                         />
 
                         {/* ATTACHMENT */}
-                        <Text style={styles.label}>Attachment</Text>
+                        <Text style={styles.label}>Attachment <Text style={{ color: COLORS.red }}>*</Text></Text>
 
                         {attachment ? (
                             // File selected — show preview chip
@@ -418,7 +431,14 @@ export default function AddExpenseModal({
                             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
                                 <Text style={{ color: COLORS.textMuted }}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.submitBtn,
+                                    !isFormValid && { opacity: 0.5, backgroundColor: COLORS.textDim }
+                                ]}
+                                onPress={handleSubmit}
+                                disabled={!isFormValid}
+                            >
                                 <Text style={{ color: "#fff", fontWeight: "600" }}>
                                     {isEditMode ? "Update Expense" : "Submit Expense"}
                                 </Text>

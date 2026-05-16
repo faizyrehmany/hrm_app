@@ -160,3 +160,25 @@ export const reactivateDesignation = async (id: number | string) => {
         return { success: false, error };
     }
 };
+export const getDepartments = async () => {
+    try {
+        const token = await SessionManager.getToken();
+        const response = await fetch(`${API_BASE_URL}/Department`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            return { success: true, data };
+        }
+        return { success: false, error: response.status };
+    } catch (error) {
+        console.error('getDepartments error:', error);
+        return { success: false, error };
+    }
+};

@@ -197,6 +197,7 @@ export const removeLeaveType = async (id: number) => {
 // services/leaveRequests.ts
 export interface LeaveApplication {
     id: string;
+    enrollNo?: string;
     month: string;
     day: string;
     type: string;
@@ -207,7 +208,16 @@ export interface LeaveApplication {
     iconColor: string;
     startDate: string; // new
     endDate: string;   // new
+    rawStartDate?: string;
+    rawEndDate?: string;
 }
+
+const parseDateOnly = (dateString: string): Date => {
+    if (!dateString) return new Date();
+    const [datePart] = dateString.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    return new Date(year, month - 1, day);
+};
 
 /**
  * Fetch leave requests from API
@@ -246,13 +256,17 @@ export const fetchLeaveRequests = async (): Promise<LeaveApplication[]> => {
                 Rejected: '#ef4444',
             };
 
+            const start = parseDateOnly(item.startDate);
+            const end = parseDateOnly(item.endDate);
+
             return {
                 id: item.id,
-                month: new Date(item.startDate).toLocaleString('en-US', { month: 'short' }),
-                day: new Date(item.startDate).getDate().toString(),
+                enrollNo: item.enrollNo,
+                month: start.toLocaleString('en-US', { month: 'short' }),
+                day: start.getDate().toString(),
                 type: item.leaveType,
                 details: `${Math.ceil(
-                    (new Date(item.endDate).getTime() - new Date(item.startDate).getTime()) /
+                    (end.getTime() - start.getTime()) /
                     (1000 * 60 * 60 * 24) +
                     1
                 )} Day(s) • ${item.reason}`,
@@ -260,8 +274,10 @@ export const fetchLeaveRequests = async (): Promise<LeaveApplication[]> => {
                 statusColor: statusColors[item.status || 'Pending'],
                 bgColor: statusColors[item.status || 'Pending'] + '20',
                 iconColor: statusColors[item.status || 'Pending'],
-                startDate: new Date(item.startDate).toLocaleDateString(), // added
-                endDate: new Date(item.endDate).toLocaleDateString(),     // added
+                startDate: start.toLocaleDateString(),
+                endDate: end.toLocaleDateString(),
+                rawStartDate: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`,
+                rawEndDate: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`,
             };
         });
     } catch (error) {

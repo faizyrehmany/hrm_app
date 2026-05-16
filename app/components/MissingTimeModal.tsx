@@ -6,6 +6,7 @@ import {
     Modal,
     Platform,
     Pressable,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -61,88 +62,96 @@ export default function MissingTimeModal({
             visible={isVisible}
             onRequestClose={onClose}
         >
-            <Pressable style={styles.overlay} onPress={onClose}>
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={styles.centeredView}
-                >
-                    <Pressable style={[styles.modalView, { backgroundColor: '#111827', borderColor: '#1f2937' }]}>
-                        {/* Header */}
-                        <View style={styles.header}>
-                            <Text style={styles.title}>Request Missing Time</Text>
-                            <TouchableOpacity onPress={onClose}>
-                                <MaterialIcons name="close" size={20} color="#9ca3af" />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Form Fields */}
-                        <View style={styles.form}>
-                            <Label text="Employee" />
-                            <TextInput
-                                style={[styles.input, styles.disabledInput]}
-                                value={employeeName}
-                                editable={false}
-                            />
-
-                            <Label text="Date" />
-                            <TextInput
-                                style={[styles.input, styles.disabledInput]}
-                                value={initialDate}
-                                editable={false}
-                            />
-
-
-                            <View style={styles.row}>
-                                <View style={{ flex: 1, marginRight: 8 }}>
-                                    <Label text="Check In" />
-                                    <TextInput
-                                        style={styles.input}
-                                        value={checkIn}
-                                        onChangeText={setCheckIn}
-                                        placeholder="HH:MM"
-                                        placeholderTextColor="#4b5563"
-                                    />
-                                </View>
-                                <View style={{ flex: 1, marginLeft: 8 }}>
-                                    <Label text="Check Out" />
-                                    <TextInput
-                                        style={styles.input}
-                                        value={checkOut}
-                                        onChangeText={setCheckOut}
-                                        placeholder="HH:MM"
-                                        placeholderTextColor="#4b5563"
-                                    />
-                                </View>
-                            </View>
-
-                            <Label text="Reason for Correction" />
-                            <TextInput
-                                style={[styles.input, styles.textArea]}
-                                value={reason}
-                                onChangeText={setReason}
-                                placeholder="e.g. Forgot to checkout"
-                                placeholderTextColor="#4b5563"
-                                multiline
-                                numberOfLines={3}
-                            />
-                        </View>
-
-                        {/* Actions */}
-                        <View style={styles.footer}>
-                            <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
-                                <Text style={styles.cancelText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={handleSubmit}
-                                style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: submitting ? 0.6 : 1 }]}
-                                disabled={submitting}
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+            >
+                <Pressable style={styles.overlay} onPress={onClose}>
+                    <View style={styles.centeredView}>
+                        <Pressable style={[styles.modalView, { backgroundColor: '#111827', borderColor: '#1f2937' }]}>
+                            <ScrollView
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={styles.scrollContent}
+                                keyboardShouldPersistTaps="handled"
                             >
-                                {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.submitText}>Submit Request</Text>}
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </KeyboardAvoidingView>
-            </Pressable>
+                                {/* Header */}
+                                <View style={styles.header}>
+                                    <Text style={styles.title}>Request Missing Time</Text>
+                                    <TouchableOpacity onPress={onClose}>
+                                        <MaterialIcons name="close" size={20} color="#9ca3af" />
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Form Fields */}
+                                <View style={styles.form}>
+                                    <Label text="Employee" />
+                                    <TextInput
+                                        style={[styles.input, styles.disabledInput]}
+                                        value={employeeName}
+                                        editable={false}
+                                    />
+
+                                    <Label text="Date" />
+                                    <TextInput
+                                        style={[styles.input, styles.disabledInput]}
+                                        value={initialDate}
+                                        editable={false}
+                                    />
+
+
+                                    <View style={styles.row}>
+                                        <View style={{ flex: 1, marginRight: 8 }}>
+                                            <Label text="Check In" />
+                                            <TextInput
+                                                style={styles.input}
+                                                value={checkIn}
+                                                onChangeText={setCheckIn}
+                                                placeholder="HH:MM"
+                                                placeholderTextColor="#4b5563"
+                                            />
+                                        </View>
+                                        <View style={{ flex: 1, marginLeft: 8 }}>
+                                            <Label text="Check Out" />
+                                            <TextInput
+                                                style={styles.input}
+                                                value={checkOut}
+                                                onChangeText={setCheckOut}
+                                                placeholder="HH:MM"
+                                                placeholderTextColor="#4b5563"
+                                            />
+                                        </View>
+                                    </View>
+
+                                    <Label text="Reason for Correction" />
+                                    <TextInput
+                                        style={[styles.input, styles.textArea]}
+                                        value={reason}
+                                        onChangeText={setReason}
+                                        placeholder="e.g. Forgot to checkout"
+                                        placeholderTextColor="#4b5563"
+                                        multiline
+                                        numberOfLines={3}
+                                    />
+                                </View>
+
+                                {/* Actions */}
+                                <View style={styles.footer}>
+                                    <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
+                                        <Text style={styles.cancelText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={handleSubmit}
+                                        style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: submitting ? 0.6 : 1 }]}
+                                        disabled={submitting}
+                                    >
+                                        {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.submitText}>Submit Request</Text>}
+                                    </TouchableOpacity>
+                                </View>
+                            </ScrollView>
+                        </Pressable>
+                    </View>
+                </Pressable>
+            </KeyboardAvoidingView>
         </Modal>
     );
 }
@@ -161,6 +170,9 @@ const styles = StyleSheet.create({
     centeredView: {
         width: '90%',
         maxWidth: 400,
+    },
+    scrollContent: {
+        flexGrow: 1,
     },
     modalView: {
         borderRadius: 16,

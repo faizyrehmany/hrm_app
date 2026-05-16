@@ -22,12 +22,14 @@ export const getExpenseCategories = async () => {
 };
 
 
-export const getExpenses = async () => {
-
+export const getExpenses = async (employeeId?: string) => {
     const token = await SessionManager.getToken();
+    const url = employeeId 
+        ? `${API_BASE_URL}/Expenses?employeeId=${employeeId}` 
+        : `${API_BASE_URL}/Expenses`;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/Expenses`, {
+        const response = await fetch(url, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
@@ -39,7 +41,8 @@ export const getExpenses = async () => {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        return await response.json();
+        const data = await response.json();
+        return data;
     } catch (error) {
         console.log("Error fetching expenses:", error);
         throw error;

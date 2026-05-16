@@ -1,7 +1,8 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Text } from 'react-native';
 import { Dropdown } from "react-native-element-dropdown";
 import { useTheme } from '../contexts/ThemeContext';
+import { MaterialIcons } from "@expo/vector-icons";
 
 interface MonthYearDropdownProps {
     selectedMonth: string;
@@ -30,35 +31,53 @@ const MonthYearDropdown: React.FC<MonthYearDropdownProps> = ({
     const defaultYears = ["All", ...Array.from({ length: 5 }, (_, i) => (currentYear - i).toString())];
 
     const yearList = years || defaultYears;
-    const selectedTextColor = isDark ? '#f0e8e8' : '#000000';
+
+    const renderIcon = (name: any) => (
+        <MaterialIcons
+            style={styles.icon}
+            color={colors.textSub}
+            name={name}
+            size={18}
+        />
+    );
 
     return (
-        <View style={styles.row}>
-            {/* Month Dropdown */}
-            <Dropdown
-                style={styles.dropdown}
-                data={[{ label: "All", value: "All" }, ...months.map(m => ({ label: m, value: m }))]}
-                labelField="label"
-                valueField="value"
-                value={selectedMonth}
-                onChange={item => onMonthChange(item.value)}
-                placeholder="Select Month"
-                placeholderStyle={{ color: '#999' }}
-                selectedTextStyle={{ color: selectedTextColor }}
-            />
+        <View style={styles.container}>
+            <View style={styles.row}>
+                {/* Month Dropdown */}
+                <Dropdown
+                    style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    placeholderStyle={[styles.placeholderStyle, { color: colors.textSub }]}
+                    selectedTextStyle={[styles.selectedTextStyle, { color: colors.textMain }]}
+                    containerStyle={[styles.containerStyle, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    itemTextStyle={{ color: colors.textMain, fontSize: 13 }}
+                    activeColor={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}
+                    data={[{ label: "All Months", value: "All" }, ...months.map(m => ({ label: m, value: m }))]}
+                    labelField="label"
+                    valueField="value"
+                    value={selectedMonth}
+                    onChange={item => onMonthChange(item.value)}
+                    renderLeftIcon={() => renderIcon("calendar-today")}
+                    maxHeight={300}
+                />
 
-            {/* Year Dropdown */}
-            <Dropdown
-                style={styles.dropdown}
-                data={yearList.map(y => ({ label: y, value: y }))}
-                labelField="label"
-                valueField="value"
-                value={selectedYear}
-                onChange={item => onYearChange(item.value)}
-                placeholder="Select Year"
-                placeholderStyle={{ color: '#999' }}
-                selectedTextStyle={{ color: selectedTextColor }}
-            />
+                {/* Year Dropdown */}
+                <Dropdown
+                    style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    placeholderStyle={[styles.placeholderStyle, { color: colors.textSub }]}
+                    selectedTextStyle={[styles.selectedTextStyle, { color: colors.textMain }]}
+                    containerStyle={[styles.containerStyle, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    itemTextStyle={{ color: colors.textMain, fontSize: 13 }}
+                    activeColor={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}
+                    data={yearList.map(y => ({ label: y === "All" ? "All Years" : y, value: y }))}
+                    labelField="label"
+                    valueField="value"
+                    value={selectedYear}
+                    onChange={item => onYearChange(item.value)}
+                    renderLeftIcon={() => renderIcon("event-note")}
+                    maxHeight={300}
+                />
+            </View>
         </View>
     );
 };
@@ -66,16 +85,39 @@ const MonthYearDropdown: React.FC<MonthYearDropdownProps> = ({
 export default MonthYearDropdown;
 
 const styles = StyleSheet.create({
+    container: {
+        width: '100%',
+    },
     row: {
         flexDirection: 'row',
-        gap: 8,
-        marginBottom: 12,
+        gap: 12,
     },
     dropdown: {
         flex: 1,
-        height: 36,
+        height: 44,
         borderWidth: 1,
-        borderRadius: 6,
-        paddingHorizontal: 8,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
     },
-});
+    icon: {
+        marginRight: 8,
+    },
+    placeholderStyle: {
+        fontSize: 13,
+    },
+    selectedTextStyle: {
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    containerStyle: {
+        borderRadius: 12,
+        marginTop: 4,
+        overflow: 'hidden',
+        borderWidth: 1,
+    },
+});

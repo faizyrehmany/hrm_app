@@ -161,11 +161,7 @@ export default function AttendanceScreen() {
                     onNotificationPress={() => console.log("Notifications pressed")}
                 />
                 <SideMenu visible={isMenuVisible} onClose={() => setMenuVisible(false)} />
-                <ScrollView
-                    style={styles.scrollView}
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                >
+                <View style={{ flex: 1 }}>
                     {/* Hero Section: Timer & Check In */}
                     <View style={styles.heroSection}>
                         {/* Date & Shift Info */}
@@ -348,8 +344,7 @@ export default function AttendanceScreen() {
                         </View> */}
                     {/* </View> */}
 
-                    <View style={{ height: 100 }} />
-                </ScrollView>
+                </View>
 
                 {/* Employee Bottom Tab Bar */}
                 <EmployeeBottomTabBar activeTab="attendance" />

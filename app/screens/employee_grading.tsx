@@ -17,6 +17,9 @@ import MonthYearDropdown from '../components/MonthYearDropdown';
 import SideMenu from '../components/SideMenu';
 import { useTheme } from '../contexts/ThemeContext';
 import { getEmployeeGrading, getGradePolicies } from '../services/grading';
+import { SessionManager } from '../services/SessionManager';
+import { EmployeeApi } from '../services/auth';
+import { getPayrollEmployees } from '../services/payroll';
 
 const { width } = Dimensions.get('window');
 
@@ -268,6 +271,7 @@ export default function GradingScreen() {
     const { isDark, colors } = useTheme();
     const [isMenuVisible, setMenuVisible] = useState(false);
     const [user, setUser] = useState<User | null>(null);
+    const [displayName, setDisplayName] = useState('');
     const [activeTab, setActiveTab] = useState<'grades' | 'policy'>('grades');
     const [gradingData, setGradingData] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -283,6 +287,38 @@ export default function GradingScreen() {
     };
 
     useEffect(() => {
+        const loadUser = async () => {
+            const userData = await SessionManager.getUser();
+            setUser(userData);
+        };
+        loadUser();
+    }, []);
+
+    useEffect(() => {
+        const loadEmployee = async () => {
+            try {
+                const data = await EmployeeApi.getEmployeeDetails();
+
+                if (data) {
+                    const name =
+                        data.firstName && data.lastName
+                            ? `${data.firstName} ${data.lastName}`
+                            : `Employee #${data.employeeId}`;
+
+                    setDisplayName(name);
+                } else {
+                    setDisplayName('Employee');
+                }
+            } catch (err) {
+                console.error('Failed to fetch employee details', err);
+                setDisplayName('Employee');
+            }
+        };
+
+        loadEmployee();
+    }, []);
+
+    useEffect(() => {
         const handler = setTimeout(() => {
             setDebouncedPolicySearch(policySearch);
         }, 500); // debounce 500ms
@@ -291,12 +327,12 @@ export default function GradingScreen() {
     }, [policySearch]);
 
     useEffect(() => {
-        fetchGrading();
-    }, [selectedYear, selectedMonth]);
-
-    useEffect(() => {
         fetchPolicies();
     }, []);
+
+    useEffect(() => {
+        fetchGrading();
+    }, [selectedYear, selectedMonth, displayName]);
 
     const fetchPolicies = async () => {
         try {
@@ -330,18 +366,33 @@ export default function GradingScreen() {
             });
             console.log("API DATA:", data);
 
-            const formatted = data.map((item: any) => ({
-                id: item.id,
-                name: `Employee ${item.employeeId}`, // backend issue
-                working: item.officialWorkingDays,
-                present: item.presentDays,
-                onTime: item.onTimeDays,
-                target: 100,
-                actual: Math.round((item.actualDutyHours / item.expectedDutyHours) * 100),
-                variance: Math.round(item.dutyHoursDifference),
-                score: Math.round(item.scorePercentage),
-                grade: item.grade,
-            }));
+            const formatted = data.map((item: any) => {
+                // Resolution logic following SideMenu reference:
+                // If it's the current user, use the displayName we fetched.
+                // Otherwise check if names are in the item or item.employee.
+                let resolvedName = `Employee #${item.employeeId}`;
+
+                if (user && item.employeeId === user.employeeId && displayName) {
+                    resolvedName = displayName;
+                } else if (item.employee?.firstName && item.employee?.lastName) {
+                    resolvedName = `${item.employee.firstName} ${item.employee.lastName}`;
+                } else if (item.firstName && item.lastName) {
+                    resolvedName = `${item.firstName} ${item.lastName}`;
+                }
+
+                return {
+                    id: item.id,
+                    name: resolvedName,
+                    working: item.officialWorkingDays,
+                    present: item.presentDays,
+                    onTime: item.onTimeDays,
+                    target: 100,
+                    actual: Math.round((item.actualDutyHours / item.expectedDutyHours) * 100),
+                    variance: Math.round(item.dutyHoursDifference),
+                    score: Math.round(item.scorePercentage),
+                    grade: item.grade,
+                };
+            });
 
             setGradingData(formatted);
 
@@ -367,9 +418,9 @@ export default function GradingScreen() {
     // Dynamic styles
     const dyn = StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.background },
-safeArea: { 
-  flex: 1 
-},        segmentedContainer: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
+        safeArea: {
+            flex: 1
+        }, segmentedContainer: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
         segmentedControl: { flexDirection: 'row' as const, height: 40, borderRadius: 10, padding: 3, backgroundColor: colors.backgroundLight },
         tab: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 8, flexDirection: 'row' as const, gap: 6 },
         tabActive: { backgroundColor: colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },

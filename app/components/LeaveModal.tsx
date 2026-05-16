@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -20,9 +20,11 @@ interface LeaveModalProps {
     visible: boolean;
     onClose: () => void;
     onSubmit: (data: any) => void;
+    initialFromDate?: Date | null;
+    initialToDate?: Date | null;
 }
 
-export const LeaveModal: React.FC<LeaveModalProps> = ({ visible, onClose, onSubmit }) => {
+export const LeaveModal: React.FC<LeaveModalProps> = ({ visible, onClose, onSubmit, initialFromDate, initialToDate }) => {
 
     const [selectedLeaveType, setSelectedLeaveType] = useState<string | null>(null);
     const [fromDate, setFromDate] = useState<Date | null>(null);
@@ -31,6 +33,18 @@ export const LeaveModal: React.FC<LeaveModalProps> = ({ visible, onClose, onSubm
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (visible) {
+            setFromDate(initialFromDate || null);
+            setToDate(initialToDate || null);
+        } else {
+            setSelectedLeaveType(null);
+            setFromDate(null);
+            setToDate(null);
+            setReason('');
+        }
+    }, [visible, initialFromDate, initialToDate]);
 
     const LEAVE_TYPES = [
         { label: 'Casual Leave', value: 'CASUAL' },
@@ -56,10 +70,13 @@ export const LeaveModal: React.FC<LeaveModalProps> = ({ visible, onClose, onSubm
                 return;
             }
 
+            const formatDateOnly = (date: Date) =>
+                `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
             const payload = {
-                employeeId: user.id,
-                startDate: fromDate.toISOString(),
-                endDate: toDate.toISOString(),
+                employeeId: Number(user.id),
+                startDate: formatDateOnly(fromDate),
+                endDate: formatDateOnly(toDate),
                 leaveType: selectedLeaveType,
                 reason
             };

@@ -13,7 +13,33 @@ export interface User {
     phone?: string;
     addressLine1?: string;
     addressLine2?: string;
-    departmentName?: string; // 🔥 ADD THIS
+    departmentName?: string;
+    departmentId?: number;
+    designationId?: number;
+    designationName?: string;
+    joiningDate?: string;
+    dateOfBirth?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+    shiftId?: number;
+    shiftName?: string;
+    startTime?: string;
+    endTime?: string;
+    headId?: number;
+    headName?: string;
+    employmentStatus?: string;
+    // Additional properties that might come from API
+    departName?: string;
+    department?: string;
+    name?: string;
+    designation?: string;
+    start_time?: string;
+    end_time?: string;
+    managerName?: string;
+    manager?: { fullName?: string };
+    head?: { fullName?: string };
 }
 
 export interface Session {

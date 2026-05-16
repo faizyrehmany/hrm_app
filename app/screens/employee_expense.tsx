@@ -23,6 +23,7 @@ import SideMenu from "../components/SideMenu";
 import { useTheme } from "../contexts/ThemeContext";
 import { API_BASE_URL } from "../services/Config";
 import { deleteExpense, getExpenseCategories, getExpenses, updateExpense } from "../services/expense";
+import { SessionManager } from "../services/SessionManager";
 
 
 const STATUS_CONFIG = (isDark: boolean) => ({
@@ -230,7 +231,7 @@ export default function EmployeeExpense() {
 
     const [showModal, setShowModal] = useState(false);
 
-    const user = { id: 1, name: "Waqas Muneer", role: "Software Engineer", email: "", fullName: "" };
+    const [user, setUser] = useState<any>(null);
 
     const statuses = ["All Status", "Pending", "Approved", "Rejected"];
     const categories = ["All Categories", "Marketing", "IT", "Office", "Travel"];
@@ -241,31 +242,36 @@ export default function EmployeeExpense() {
     const [categoryOptions, setCategoryOptions] = useState([]);
 
     useEffect(() => {
-        const loadCategories = async () => {
-            const data = await getExpenseCategories();
+        const init = async () => {
+            const userData = await SessionManager.getUser();
+            setUser(userData);
 
-            const formatted = data.map((item: any) => ({
+            const cats = await getExpenseCategories();
+            const formatted = cats.map((item: any) => ({
                 label: item.name,
-                value: item.id, // ✅ instead of id
+                value: item.id,
             }));
-
             setCategoryOptions(formatted);
+
+            loadExpenses(userData?.employeeId);
         };
-
-        loadCategories();
+        init();
     }, []);
 
 
-    useEffect(() => {
-        loadExpenses();
-    }, []);
 
-    const loadExpenses = async () => {
-        setLoading(true);
-        const data = await getExpenses();
-
-        setExpenses(data);
-        setLoading(false);
+    const loadExpenses = async (empId?: string) => {
+        try {
+            setLoading(true);
+            const data = await getExpenses(empId || user?.employeeId);
+            // Robustly handle array vs object with items
+            const expenseList = Array.isArray(data) ? data : (data?.items || data?.data || []);
+            setExpenses(expenseList);
+        } catch (error) {
+            console.log("Load expenses error:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const normalized = expenses.map((e: any) => ({
@@ -598,17 +604,15 @@ export default function EmployeeExpense() {
                 onSubmit={async (data) => {
                     try {
                         if (editingExpense) {
-                            // UPDATE
-                            const updated = await updateExpense(editingExpense.id, data);
-
+                            // Parent update logic if needed (modal already calls updateExpense)
                             setExpenses((prev) =>
                                 prev.map((e) =>
-                                    e.id === editingExpense.id ? { ...e, ...updated } : e
+                                    e.id === editingExpense.id ? { ...e, ...data } : e
                                 )
                             );
                         } else {
-                            // CREATE
-                            console.log("NEW EXPENSE:", data);
+                            // data here is the response from createExpense called in modal
+                            setExpenses((prev) => [data, ...prev]);
                         }
 
                         setShowModal(false);

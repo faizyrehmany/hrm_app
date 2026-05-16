@@ -1,22 +1,21 @@
-import { formatTime } from "@/helpers/helper";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
     Dimensions,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
-import { PieChart } from "react-native-chart-kit";
 import { BarChart } from "react-native-gifted-charts";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import EmployeeBottomTabBar from "../components/EmployeeBottomTabBar";
-import EmployeeHeader from "../components/EmployeeHeader";
-import MonthYearDropdown from "../components/MonthYearDropdown";
 import SideMenu from "../components/SideMenu";
+import TodayAttendanceHeader from "../components/TodayAttendanceHeader";
 import { useTheme } from "../contexts/ThemeContext";
 import { SessionManager, User } from "../services/SessionManager";
 import { getSalaryAdvances, SalaryAdvance } from "../services/advanceSalary";
@@ -36,6 +35,17 @@ const parseLocalDate = (dateString: string): Date => {
     const [year, month, day] = datePart.split("-").map(Number);
     const [hours, minutes, seconds] = (timePart.split(".")[0]).split(":").map(Number);
     return new Date(year, month - 1, day, hours, minutes, seconds || 0);
+};
+
+// Returns Monday of the week that is `offset` weeks from the current week
+const getWeekMonday = (offset: number): Date => {
+    const today = new Date();
+    const dow = today.getDay(); // 0=Sun, 1=Mon...
+    const diff = dow === 0 ? 6 : dow - 1; // days since Monday
+    const mon = new Date(today);
+    mon.setHours(0, 0, 0, 0);
+    mon.setDate(today.getDate() - diff + offset * 7);
+    return mon;
 };
 
 export default function DashboardScreen() {
@@ -73,6 +83,7 @@ export default function DashboardScreen() {
     } | null>(null);
 
     const [tooltipVisible, setTooltipVisible] = useState(false);
+    const [chartWeekOffset, setChartWeekOffset] = useState(0);
 
     const [displayName, setDisplayName] = useState('');
 
@@ -118,12 +129,10 @@ export default function DashboardScreen() {
 
 
     const now = new Date();
-    const monthNames = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
-    ];
-    const [selectedMonth, setSelectedMonth] = useState<string>(monthNames[now.getMonth()]);
-    const [selectedYear, setSelectedYear] = useState<string>(now.getFullYear().toString());
+    const [fromDate, setFromDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), 1));
+    const [toDate, setToDate] = useState<Date>(now);
+    const [activeDatePicker, setActiveDatePicker] = useState<'from' | 'to' | null>(null);
+    const [isDatePickerVisible, setDatePickerVisible] = useState(false);
 
     const dynamicStyles = createDynamicStyles(colors, isDark);
 
@@ -139,6 +148,8 @@ export default function DashboardScreen() {
         };
         loadUser();
     }, []);
+
+
 
     useEffect(() => {
         const loadEmployee = async () => {
@@ -168,16 +179,27 @@ export default function DashboardScreen() {
         const loadHolidays = async () => {
             setLoadingHolidays(true);
             try {
-                const res = await getHolidays(Number(selectedYear));
-                if (res.success) setHolidays(res.data);
+                const yearsToFetch = new Set<number>();
+                const startYear = fromDate.getFullYear();
+                const endYear = toDate.getFullYear();
+                for (let year = startYear; year <= endYear; year++) {
+                    yearsToFetch.add(year);
+                }
+                const holidayResponses = await Promise.all(
+                    Array.from(yearsToFetch).map((year) => getHolidays(year))
+                );
+                setHolidays(
+                    holidayResponses.flatMap((res) => (res.success ? res.data : []))
+                );
             } catch (err) {
                 console.error("Failed to fetch holidays:", err);
+                setHolidays([]);
             } finally {
                 setLoadingHolidays(false);
             }
         };
         loadHolidays();
-    }, [selectedYear]);
+    }, [fromDate, toDate]);
 
     useEffect(() => {
         const loadLoans = async () => {
@@ -272,7 +294,7 @@ export default function DashboardScreen() {
             if (!user?.enrollNo) return;
             setLoadingCorrections(true);
             try {
-                setAttendanceCorrections(await getAttendanceCorrections(user.enrollNo));
+                setAttendanceCorrections(await getAttendanceCorrections());
             } catch (err) {
                 console.error("Failed to fetch attendance corrections:", err);
             } finally {
@@ -286,40 +308,28 @@ export default function DashboardScreen() {
     // Filtering logic (kept minimal – only what's needed for tables + pending)
     // ──────────────────────────────────────────────
 
-    const shouldFilter = selectedMonth !== null && selectedYear !== null;
-    const monthMap: Record<string, number> = {
-        January: 0, February: 1, March: 2, April: 3,
-        May: 4, June: 5, July: 6, August: 7,
-        September: 8, October: 9, November: 10, December: 11,
-    };
-    const filterMonth = shouldFilter ? monthMap[selectedMonth!] : null;
-    const filterYear = shouldFilter ? Number(selectedYear) : null;
+    const rangeStart = new Date(fromDate);
+    rangeStart.setHours(0, 0, 0, 0);
+
+    const rangeEnd = new Date(toDate);
+    rangeEnd.setHours(23, 59, 59, 999);
+
+    const isInRange = (date: Date) => date >= rangeStart && date <= rangeEnd;
 
     const filteredAttendanceLogs = attendanceLogs.filter((log) => {
-        if (!shouldFilter) return true;
         const date = parseLocalDate(log.workDate);
-        return date.getMonth() === filterMonth && date.getFullYear() === filterYear;
+        return isInRange(date);
     });
 
     const filteredLeaves = leaves.filter((l) => {
-        if (!shouldFilter) return true;
         const start = parseLocalDate(l.startDate);
         const end = parseLocalDate(l.endDate);
-        const days: string[] = [];
-        const current = new Date(start);
-        while (current <= end) {
-            if (current.getMonth() === filterMonth && current.getFullYear() === filterYear) {
-                days.push(current.toDateString());
-            }
-            current.setDate(current.getDate() + 1);
-        }
-        return days.length > 0;
+        return end >= rangeStart && start <= rangeEnd;
     });
 
     const filteredPayrolls = payrolls.filter((pay) => {
-        if (!shouldFilter) return true;
-        const date = parseLocalDate(pay.period);
-        return date.getMonth() === filterMonth && date.getFullYear() === filterYear;
+        const payDate = new Date(pay.payrollYear, pay.payrollMonth - 1, 1);
+        return isInRange(payDate);
     });
 
     // Only keep what's needed for Pending Requests
@@ -327,22 +337,14 @@ export default function DashboardScreen() {
         if (corr.status !== "Pending") return false;
         if (!user) return false;
         if (corr.enrollNo && corr.enrollNo !== user.enrollNo) return false;
-        if (!shouldFilter) return true;
-        return (
-            parseLocalDate(corr.date).getMonth() === filterMonth &&
-            parseLocalDate(corr.date).getFullYear() === filterYear
-        );
+        return isInRange(parseLocalDate(corr.date));
     }).length;
 
     const pendingLeaves = leaves.filter((l) => {
         if (l.status !== "Pending") return false;
         if (!user) return false;
         if (l.enrollNo && l.enrollNo !== user.enrollNo) return false;
-        if (!shouldFilter) return true;
-        return (
-            parseLocalDate(l.startDate).getMonth() === filterMonth &&
-            parseLocalDate(l.startDate).getFullYear() === filterYear
-        );
+        return isInRange(parseLocalDate(l.startDate));
     }).length;
 
 
@@ -380,16 +382,15 @@ export default function DashboardScreen() {
                 .sort((a, b) => b.time.getTime() - a.time.getTime())[0];
 
             if (firstIn) {
-                const h = firstIn.time.getHours();
-                const m = firstIn.time.getMinutes();
-                // Late if arrived after 9:00 AM
-                if (h > 9 || (h === 9 && m > 0)) lateCount++;
+                // Late if check-in is after 9:30 AM (570 minutes)
+                const totalInMinutes = firstIn.time.getHours() * 60 + firstIn.time.getMinutes();
+                if (totalInMinutes > 9 * 60 + 30) lateCount++;
             }
 
             if (lastOut) {
-                const h = lastOut.time.getHours();
-                // Early if left before 6:00 PM
-                if (h < 18) earlyCount++;
+                // Early going if check-out is before 6:00 PM (1080 minutes)
+                const totalOutMinutes = lastOut.time.getHours() * 60 + lastOut.time.getMinutes();
+                if (totalOutMinutes < 18 * 60) earlyCount++;
             }
         });
 
@@ -398,44 +399,48 @@ export default function DashboardScreen() {
 
     const { lateCount: lateComingCount, earlyCount: earlyGoingCount } = calculateExceptions();
 
-    const monthTitle = selectedMonth === "All" ? "All Months" : selectedMonth;
-    const yearTitle = selectedYear === "All" ? "" : ` ${selectedYear}`;
-    const cardTitleSuffix = `${monthTitle}${yearTitle}`;
+    const formatDateLabel = (date: Date) => {
+        if (date.toDateString() === new Date().toDateString()) {
+            return `Today, ${date.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        }
+        return date.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
 
-    const getTotalWorkDaysInMonth = (month: number, year: number, holidaysList: any[] = []) => {
+    const cardTitleSuffix = fromDate.toDateString() === toDate.toDateString()
+        ? formatDateLabel(fromDate)
+        : `${formatDateLabel(fromDate)} – ${formatDateLabel(toDate)}`;
+
+    const getTotalWorkDaysInRange = (startDate: Date, endDate: Date, holidaysList: any[] = []) => {
         let count = 0;
-        const today = new Date();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const current = new Date(startDate);
+        current.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(0, 0, 0, 0);
 
-        // ✅ If it's the current month/year, only count up to today
-        const lastDay = (month === today.getMonth() && year === today.getFullYear())
-            ? today.getDate()
-            : daysInMonth;
-
-        for (let day = 1; day <= lastDay; day++) {
-            const date = new Date(year, month, day);
-            const isSunday = date.getDay() === 0;
+        while (current <= end) {
+            const isSunday = current.getDay() === 0;
             const isHoliday = holidaysList.some(
-                h => parseLocalDate(h.date).toDateString() === date.toDateString()
+                (h) => parseLocalDate(h.date).toDateString() === current.toDateString()
             );
             if (!isSunday && !isHoliday) count++;
+            current.setDate(current.getDate() + 1);
         }
+
         return count;
     };
 
-    // Dummy values so UI doesn't break (you can replace with real data later)
     let presentDatesSet = new Set(
-        filteredAttendanceLogs.map(log => parseLocalDate(log.logTime).toDateString())
+        filteredAttendanceLogs.map((log) => parseLocalDate(log.logTime).toDateString())
     );
 
     let leaveDatesSet = new Set(
-        filteredLeaves.flatMap(l => {
+        filteredLeaves.flatMap((l) => {
             const start = parseLocalDate(l.startDate);
             const end = parseLocalDate(l.endDate);
             const dates: string[] = [];
             const current = new Date(start);
             while (current <= end) {
-                if (current.getMonth() === filterMonth && current.getFullYear() === filterYear) {
+                if (isInRange(current)) {
                     dates.push(current.toDateString());
                 }
                 current.setDate(current.getDate() + 1);
@@ -444,9 +449,7 @@ export default function DashboardScreen() {
         })
     );
 
-    const totalWorkDays = filterMonth !== null && filterYear !== null
-        ? getTotalWorkDaysInMonth(filterMonth, filterYear, holidays)
-        : 0;
+    const totalWorkDays = getTotalWorkDaysInRange(rangeStart, rangeEnd, holidays);
 
     const absentDaysCount = totalWorkDays - presentDatesSet.size - leaveDatesSet.size;
 
@@ -454,7 +457,6 @@ export default function DashboardScreen() {
         ? Math.round((presentDatesSet.size / totalWorkDays) * 100)
         : 0;
 
-    // Assign to UI variables
     const presentDays = presentDatesSet.size;
     const absentDays = absentDaysCount >= 0 ? absentDaysCount : 0;
     const leavesThisMonth = leaveDatesSet.size;
@@ -474,7 +476,7 @@ export default function DashboardScreen() {
         filteredAttendanceLogs.forEach((log) => {
             const dateObj = parseLocalDate(log.logTime);
 
-            if (dateObj.getMonth() !== filterMonth || dateObj.getFullYear() !== filterYear) return;
+            if (!isInRange(dateObj)) return;
             if (dateObj.getDay() === 0) return;
             const isHoliday = holidays.some(h => parseLocalDate(h.date).toDateString() === dateObj.toDateString());
             if (isHoliday) return;
@@ -512,7 +514,7 @@ export default function DashboardScreen() {
         });
 
         return [
-            { name: "On Time", population: onTimeCount, color: "#22c55e" },
+            { name: "On Time", population: onTimeCount, color: "#10b981" },
             { name: "Late", population: lateCount, color: "#f59e0b" },
             { name: "Early", population: earlyCount, color: "#3b82f6" },
         ];
@@ -547,10 +549,7 @@ export default function DashboardScreen() {
         filteredAttendanceLogs.forEach((log) => {
             const dateObj = parseLocalDate(log.logTime);
 
-            if (
-                dateObj.getMonth() !== monthMap[selectedMonth!] ||
-                dateObj.getFullYear() !== Number(selectedYear)
-            ) return;
+            if (!isInRange(dateObj)) return;
 
             const dateKey = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()).getTime();
             if (!grouped[dateKey]) grouped[dateKey] = [];
@@ -619,386 +618,462 @@ export default function DashboardScreen() {
     const spacing = isManyBars ? 5 : 5;
     const barWidth = Math.max(5, Math.min(1, totalWidth / (numBars * 1.5)));
 
+    // getWeekMonday is defined at module level above the component
+
+    const getWeekRangeLabel = () => {
+        const mon = getWeekMonday(chartWeekOffset);
+        const sun = new Date(mon);
+        sun.setDate(mon.getDate() + 6);
+        const fmt = (d: Date) => `${d.getDate()} ${d.toLocaleDateString('en', { month: 'short' })}`;
+        return `${fmt(mon)} – ${fmt(sun)}`;
+    };
+
+    const renderTopLabel = (text: string, color: string) => (
+        <View style={{
+            position: 'absolute',
+            bottom: 6,
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 25,
+        }}>
+            <Text style={{
+                fontSize: 8,
+                color: color,
+                fontWeight: '800',
+                textTransform: 'uppercase',
+                letterSpacing: 0.3,
+                transform: [{ rotate: '-90deg' }],
+                width: 40,
+                textAlign: 'center',
+            }}>
+                {text}
+            </Text>
+        </View>
+    );
+    const get7DayChartData = () => {
+        const mon = getWeekMonday(chartWeekOffset);
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+
+        let weeklyTotalMinutes = 0;
+
+        const data = Array.from({ length: 7 }, (_, i) => {
+            const day = new Date(mon);
+            day.setDate(mon.getDate() + i);
+            const dayStr = day.toDateString();
+            const dayLabel = day.toLocaleDateString('en', { weekday: 'short' });
+            const isFuture = day > today;
+            const isSunday = day.getDay() === 0;
+
+            // Holiday check (Sunday or from holidays array)
+            const isHoliday = isSunday || holidays.some(h => parseLocalDate(h.date).toDateString() === dayStr);
+
+            if (isHoliday) {
+                return {
+                    value: 8,
+                    label: dayLabel,
+                    frontColor: '#FFE082',
+                    topLabelComponent: () => (
+                        <View style={{ marginBottom: -72, zIndex: 10, alignItems: 'center' }}>
+                            {renderTopLabel("Holiday", "#B45309")}
+                        </View>
+                    ),
+                    isHoliday: true,
+                };
+            }
+
+            const dayLogs = attendanceLogs.filter(log => parseLocalDate(log.logTime).toDateString() === dayStr);
+
+            if (dayLogs.length === 0 && !isFuture) {
+                return {
+                    value: 4,           // taller so text fits
+                    label: dayLabel,
+                    frontColor: '#FFAB91',
+                    topLabelComponent: () => (
+                        <View style={{ marginBottom: -40, zIndex: 10, alignItems: 'center' }}>
+                            {renderTopLabel("Absent", "#C2410C")}
+                        </View>
+                    ),
+                    isAbsent: true,
+                };
+            }
+
+            // Calculate work hours
+            const sorted = [...dayLogs].sort((a, b) => parseLocalDate(a.logTime).getTime() - parseLocalDate(b.logTime).getTime());
+            let mins = 0;
+            let lastIn: Date | null = null;
+            sorted.forEach(log => {
+                if (log.modeLabel === 'CheckIn') lastIn = parseLocalDate(log.logTime);
+                else if (log.modeLabel === 'CheckOut' && lastIn) {
+                    const d = (parseLocalDate(log.logTime).getTime() - lastIn.getTime()) / 60000;
+                    if (d > 0 && d < 720) mins += d;
+                    lastIn = null;
+                }
+            });
+
+            mins = Math.min(mins, 14 * 60);
+            weeklyTotalMinutes += mins;
+            const h = Number((mins / 60).toFixed(2));
+            return {
+                value: h,
+                label: dayLabel,
+                frontColor: '#90CAF9', // Pastel Blue
+            };
+        });
+
+        return { data, totalHours: (weeklyTotalMinutes / 60).toFixed(2) };
+    };
+
+    const { data: weekData, totalHours: weekTotalHours } = get7DayChartData();
+    const weekRangeLabel = getWeekRangeLabel();
+
     const barData = dailyLabels.map((label, index) => ({
         value: dailyHours[index],
         label: label,
     }));
 
     return (
-        <SafeAreaView style={[{ flex: 1 }, dynamicStyles.container]}>
-            <EmployeeHeader
-                user={user}
-                onMenuPress={() => setMenuVisible(true)}
-                onNotificationPress={() => console.log("Notifications pressed")}
-            />
-            <SideMenu visible={isMenuVisible} onClose={() => setMenuVisible(false)} />
 
-            <ScrollView
-                style={[styles.container, dynamicStyles.container]}
-                contentContainerStyle={{ paddingBottom: 82 }}
-            >
-                {/* <View style={styles.header}>
-                    <Text style={[styles.title, dynamicStyles.title]}>
-                        {displayName && `Welcome Back, ${displayName} 👋`}
-                    </Text>
-                    <Text style={[styles.subtitle, dynamicStyles.subtitle]}>
-                        Here's what's happening with your work profile today.
-                    </Text>
-                </View> */}
+        <View style={{ flex: 1, backgroundColor: colors.primary }}>
+            <StatusBar backgroundColor={colors.primary} barStyle="light-content" translucent={false} />
 
-                <View style={{ marginVertical: 16 }}>
-                    <MonthYearDropdown
-                        selectedMonth={selectedMonth}
-                        selectedYear={selectedYear}
-                        onMonthChange={setSelectedMonth}
-                        onYearChange={setSelectedYear}
+            <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
+                <View style={{ flex: 1, backgroundColor: colors.background }}>
+
+                    <TodayAttendanceHeader
+                        displayName={displayName}
+                        attendanceLogs={attendanceLogs}
+                        onMenuPress={() => setMenuVisible(true)}
+                        parseLocalDate={parseLocalDate}
                     />
-                </View>
 
-                {/* Stats Cards – kept UI, removed real calc */}
-                <View style={styles.cardRow}>
-                    <StatCard
-                        title="Present Days"
-                        value={presentDays}
-                        icon="check-circle"
-                        dynamicStyles={dynamicStyles}
-                    />
-                    <StatCard
-                        title="Absent Days"
-                        value={absentDays}
-                        icon="cancel"
-                        dynamicStyles={dynamicStyles}
-                    />
-                </View>
+                    <SideMenu visible={isMenuVisible} onClose={() => setMenuVisible(false)} />
 
-                <View style={styles.cardRow}>
-                    <StatCard
-                        title="Leaves This Month"
-                        value={leavesThisMonth}
-                        icon="event"
-                        dynamicStyles={dynamicStyles}
-                    />
-                    <StatCard
-                        title="Attendance %"
-                        value={attendancePercent}
-                        icon="trending-up"
-                        dynamicStyles={dynamicStyles}
-                    />
-                </View>
-
-                {/* Daily Work Hours – kept UI structure */}
-                <View style={styles.section}>
-                    <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
-                        <View style={styles.dailyWorkHeader}>
-                            <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>
-                                Daily Work Hours
-                            </Text>
-                            <Text style={[styles.totalHours, dynamicStyles.textMain]}>
-                                {totalHours} TOTAL HOURS
-                            </Text>
-                        </View>
-
-                        {/* Tooltip */}
-                        {tooltipVisible && selectedBar && (
-                            <View
-                                style={[
-                                    styles.fixedTooltip,
-                                    { borderColor: colors.primary },
-                                ]}
-                            >
-                                <Text style={styles.tooltipLabel}>
-                                    Day {selectedBar.label}
-                                </Text>
-                                <Text style={[styles.tooltipValue, { color: colors.primary }]}>
-                                    {selectedBar.value}h
-                                </Text>
+                    <ScrollView
+                        style={[styles.container, dynamicStyles.container]}
+                        contentContainerStyle={{ paddingBottom: 140 }}
+                    >
+                        <View style={{ marginVertical: 5, zIndex: 10 }}>
+                            <View style={[styles.dateRangeRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                <TouchableOpacity
+                                    style={[styles.dateSelector, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                                    onPress={() => {
+                                        setActiveDatePicker('from');
+                                        setDatePickerVisible(true);
+                                    }}
+                                >
+                                    <Text style={[styles.dateSelectorLabel, { color: colors.textSub }]}>From</Text>
+                                    <Text style={[styles.dateSelectorText, { color: colors.textMain }]}>{fromDate.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.dateSelector, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                                    onPress={() => {
+                                        setActiveDatePicker('to');
+                                        setDatePickerVisible(true);
+                                    }}
+                                >
+                                    <Text style={[styles.dateSelectorLabel, { color: colors.textSub }]}>To</Text>
+                                    <Text style={[styles.dateSelectorText, { color: colors.textMain }]}>{toDate.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                                </TouchableOpacity>
                             </View>
-                        )}
-
-                        <View style={{ overflow: "hidden" }}>
-                            <BarChart
-                                data={barData}
-                                width={totalWidth}
-                                height={180}
-                                barWidth={barWidth}
-                                spacing={spacing}
-                                initialSpacing={1}
-                                barBorderRadius={4}
-                                labelsExtraHeight={20}
-                                xAxisLabelsHeight={20}
-                                overflowTop={30}
-                                disableScroll
-                                frontColor={colors.primary}
-                                yAxisLabelWidth={15}
-                                formatYLabel={formatYLabel}
-                                xAxisLabelTextStyle={{ fontSize: 7, color: colors.textSub }}
-                                yAxisTextStyle={{ fontSize: 8, color: "#555" }}
-                                xAxisColor="#d1d5db"
-                                yAxisThickness={0}
-                                xAxisThickness={1}
-                                rulesType="solid"
-                                noOfSections={5}
-                                isAnimated={false}
-                                onPress={(item: any, index: number) => showBarTooltip(item, index)}
+                            <DateTimePickerModal
+                                isVisible={isDatePickerVisible}
+                                mode="date"
+                                date={activeDatePicker === 'from' ? fromDate : toDate}
+                                onConfirm={(date) => {
+                                    setDatePickerVisible(false);
+                                    if (activeDatePicker === 'from') {
+                                        const newFrom = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                                        setFromDate(newFrom);
+                                        if (newFrom > toDate) setToDate(newFrom);
+                                    } else if (activeDatePicker === 'to') {
+                                        const newTo = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                                        setToDate(newTo);
+                                        if (newTo < fromDate) setFromDate(newTo);
+                                    }
+                                    setActiveDatePicker(null);
+                                }}
+                                onCancel={() => {
+                                    setDatePickerVisible(false);
+                                    setActiveDatePicker(null);
+                                }}
                             />
                         </View>
-                    </View>
-                </View>
 
-                {/* Shift Stats – kept UI */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>
-                        Shift Stats
-                    </Text>
-                    <PieChart
-                        data={shiftData.map(item => ({
-                            ...item,
-                            color: item.color, // this controls slice color
-                            legendFontColor: item.color, // this controls label/legend text color
-                            legendFontSize: 12,
-                        }))}
-                        width={screenWidth - 40}
-                        height={180}
-                        chartConfig={{
-                            backgroundColor: "transparent",
-                            color: () => colors.textMain, // slice number (percentage) color
-                            labelColor: () => colors.textMain, // fallback for label inside slice
-                        }}
-                        accessor="population"
-                        backgroundColor="transparent"
-                        paddingLeft="10"
-                        absolute
-                    />
-                </View>
 
-                {/* Exceptions – kept UI */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>
-                        Exceptions
-                    </Text>
-                    <View style={styles.cardRow}>
-                        <InfoCard
-                            label="Late Coming"
-                            value={lateComingCount.toString()}
-                            dynamicStyles={dynamicStyles}
-                        />
-                        <InfoCard
-                            label="Early Going"
-                            value={earlyGoingCount.toString()}
-                            dynamicStyles={dynamicStyles}
-                        />
-                    </View>
-                </View>
-
-                {/* Pending Requests – kept (only real remaining counts) */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>
-                        Pending Requests
-                    </Text>
-                    <View style={styles.cardRow}>
-                        <InfoCard
-                            label="Missing Time Requests"
-                            value={pendingMissingTime.toString()}
-                            dynamicStyles={dynamicStyles}
-                        />
-                        <InfoCard
-                            label="Leave Requests"
-                            value={pendingLeaves.toString()}
-                            dynamicStyles={dynamicStyles}
-                        />
-                    </View>
-                </View>
-
-                {/* Tables – unchanged */}
-                <DashboardCard
-                    title={`Attendance Logs (${cardTitleSuffix})`}
-                    seeMore
-                    onSeeMorePress={() => router.push("/screens/attendance")}
-                >
-                    <View style={[styles.tableRow, { borderBottomWidth: 2, borderBottomColor: colors.primary }]}>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Date</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Time</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Mode</Text>
-                    </View>
-                    {loadingLogs ? (
-                        <Text style={[{ textAlign: "center", marginVertical: 16 }, dynamicStyles.textSub]}>
-                            Loading attendance logs...
-                        </Text>
-                    ) : (
-                        filteredAttendanceLogs.slice(0, 5).map((log, idx) => (
-                            <TableRow
-                                key={idx}
-                                date={log.workDate ? new Date(log.workDate).toLocaleDateString() : "-"}
-                                time={log.logTime ? formatTime(log.logTime) : "-"}
-                                mode={log.modeLabel || "-"}
-                                dynamicStyles={dynamicStyles}
-                            />
-                        ))
-                    )}
-                </DashboardCard>
-
-                {/* LEAVES CARD */}
-                <DashboardCard
-                    title={`Leaves (${cardTitleSuffix})`}
-                    seeMore
-                    onSeeMorePress={() => router.push("/screens/employee_leaves")}
-                >
-
-                    {/* Header Row */}
-                    <View style={[styles.tableRow, { borderBottomWidth: 2, borderBottomColor: colors.primary }]}>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Type</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Duration</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Status</Text>
-                    </View>
-
-                    {loadingLeaves ? (
-                        <Text style={[{ textAlign: "center", marginVertical: 16 }, dynamicStyles.textSub]}>
-                            Loading leave requests...
-                        </Text>
-                    ) : (
-                        filteredLeaves.slice(0, 5).map((leave, idx) => (
-                            <View key={idx} style={styles.tableRow}>
-                                <Text style={[styles.tableText, dynamicStyles.textMain]}>{leave.type}</Text>
-                                <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                    {leave.startDate} - {leave.endDate}
-                                </Text>
-                                <Text style={[styles.tableText, { color: leave.statusColor }]}>
-                                    {leave.status}
-                                </Text>
+                        {/* ── TOTAL ATTENDANCE SECTION ── */}
+                        <View style={[styles.totalAttCard, { backgroundColor: colors.surface }]}>
+                            {/* Header */}
+                            <View style={styles.totalAttHeader}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                                    <MaterialIcons name="assessment" size={22} color={colors.primary} style={{ marginRight: 8 }} />
+                                    <Text style={[styles.totalAttTitle, dynamicStyles.sectionTitle, { marginBottom: 0 }]}>Total Attendance</Text>
+                                </View>
                             </View>
-                        ))
-                    )}
-                </DashboardCard>
-                {/* PAYROLL CARD */}
-                <DashboardCard
-                    title={`Payroll (${cardTitleSuffix})`}
-                    seeMore
-                    onSeeMorePress={() => router.push("/screens/employee_payroll")}
-                >
 
-                    {/* Header Row */}
-                    <View style={[styles.tableRow, { borderBottomWidth: 2, borderBottomColor: colors.primary }]}>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Month</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Net Salary</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Status</Text>
-                    </View>
-
-                    {loadingPayrolls ? (
-                        <Text style={[{ textAlign: "center", marginVertical: 16 }, dynamicStyles.textSub]}>
-                            Loading payroll records...
-                        </Text>
-                    ) : (
-                        filteredPayrolls.slice(0, 5).map((pay, idx) => (
-                            <View key={idx} style={styles.tableRow}>
-                                <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                    {pay.periodLabel}
-                                </Text>
-                                <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                    Rs {pay.netPay.toLocaleString()}
-                                </Text>
-                                <Text style={[styles.tableText, { color: pay.status === 'PAID' ? '#10b981' : '#ef4444' }]}>
-                                    {pay.status}
-                                </Text>
+                            {/* Row 1: Present | Absent | Leaves */}
+                            <View style={styles.totalAttRow}>
+                                <View style={styles.totalAttCell}>
+                                    <Text style={[styles.totalAttValue, { color: '#22c55e', backgroundColor: isDark ? 'rgba(34, 197, 94, 0.1)' : '#ecfdf5' }]}>
+                                        {presentDays}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                        <MaterialIcons name="check-circle" size={12} color="#22c55e" style={{ marginRight: 4 }} />
+                                        <Text style={[styles.totalAttLabel, dynamicStyles.textSub, { marginTop: 0 }]}>Present</Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.totalAttDivider, { backgroundColor: colors.border }]} />
+                                <View style={styles.totalAttCell}>
+                                    <Text style={[styles.totalAttValue, { color: '#ef4444', backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#fef2f2' }]}>
+                                        {absentDays}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                        <MaterialIcons name="cancel" size={12} color="#ef4444" style={{ marginRight: 4 }} />
+                                        <Text style={[styles.totalAttLabel, dynamicStyles.textSub, { marginTop: 0 }]}>Absent</Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.totalAttDivider, { backgroundColor: colors.border }]} />
+                                <View style={styles.totalAttCell}>
+                                    <Text style={[styles.totalAttValue, { color: colors.primary, backgroundColor: isDark ? 'rgba(59, 130, 246, 0.1)' : '#eff6ff' }]}>
+                                        {leavesThisMonth}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                        <MaterialIcons name="event" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+                                        <Text style={[styles.totalAttLabel, dynamicStyles.textSub, { marginTop: 0 }]}>Leaves</Text>
+                                    </View>
+                                </View>
                             </View>
-                        ))
-                    )}
-                </DashboardCard>
 
-                {/* LOANS & ADVANCES CARD */}
-                <DashboardCard title="Loans & Advances" seeMore onSeeMorePress={() => router.push("/screens/allowances")}>
-                    {/* Header Row */}
-                    <View style={[styles.tableRow, { borderBottomWidth: 2, borderBottomColor: colors.primary }]}>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Type</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Amount</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Balance</Text>
-                    </View>
+                            {/* Separator */}
+                            <View style={[styles.totalAttSeparator, { backgroundColor: colors.border, marginVertical: 12 }]} />
 
-                    {loadingLoans || loadingAdvances ? (
-                        <Text style={[{ textAlign: "center", marginVertical: 16 }, dynamicStyles.textSub]}>
-                            Loading loans and advances...
-                        </Text>
-                    ) : combinedLoansAdvances.length === 0 ? (
-                        <Text style={[{ textAlign: "center", marginVertical: 16 }, dynamicStyles.textSub]}>
-                            No records found
-                        </Text>
-                    ) : (
-                        combinedLoansAdvances.slice(0, 5).map((item, idx) => (
-                            <View key={idx} style={styles.tableRow}>
-                                <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                    {item.type}
-                                </Text>
-                                <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                    Rs {item.amount.toLocaleString()}
-                                </Text>
-                                <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                    Rs {item.balance.toLocaleString()}
-                                </Text>
+                            {/* Row 2: Attendance % | Missing Time Request | Leave Request */}
+                            <View style={styles.totalAttRow}>
+                                <View style={styles.totalAttCell}>
+                                    <Text style={[styles.totalAttValue, { color: '#8b5cf6', backgroundColor: isDark ? 'rgba(139, 92, 246, 0.1)' : '#f5f3ff' }]}>
+                                        {attendancePercent}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                        <MaterialIcons name="trending-up" size={12} color="#8b5cf6" style={{ marginRight: 4 }} />
+                                        <Text style={[styles.totalAttLabel, dynamicStyles.textSub, { marginTop: 0 }]}>Attendance %</Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.totalAttDivider, { backgroundColor: colors.border }]} />
+                                <View style={styles.totalAttCell}>
+                                    <Text style={[styles.totalAttValue, { color: '#f59e0b', backgroundColor: isDark ? 'rgba(245, 158, 11, 0.1)' : '#fffbeb' }]}>
+                                        {pendingMissingTime}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                        <MaterialIcons name="access-time" size={12} color="#f59e0b" style={{ marginRight: 4 }} />
+                                        <Text style={[styles.totalAttLabel, dynamicStyles.textSub, { marginTop: 0 }]}>Missing Time</Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.totalAttDivider, { backgroundColor: colors.border }]} />
+                                <View style={styles.totalAttCell}>
+                                    <Text style={[styles.totalAttValue, { color: '#ec4899', backgroundColor: isDark ? 'rgba(236, 72, 153, 0.1)' : '#fdf2f8' }]}>
+                                        {pendingLeaves}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                        <MaterialIcons name="assignment" size={12} color="#ec4899" style={{ marginRight: 4 }} />
+                                        <Text style={[styles.totalAttLabel, dynamicStyles.textSub, { marginTop: 0 }]}>Leave Request</Text>
+                                    </View>
+                                </View>
                             </View>
-                        ))
-                    )}
-                </DashboardCard>
-                {/* HOLIDAYS CARD */}
-                <DashboardCard
-                    title={`Holidays In (${cardTitleSuffix})`}
-                    seeMore
-                    onSeeMorePress={() => router.push("/screens/employee_holidays")}
-                >
-                    <View style={[styles.tableRow, { borderBottomWidth: 2, borderBottomColor: colors.primary }]}>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Date</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Holiday</Text>
-                        <Text style={[styles.tableHeader, dynamicStyles.textSub]}>Type</Text>
-                    </View>
 
-                    {loadingHolidays ? (
-                        <Text style={[{ textAlign: "center", marginVertical: 16 }, dynamicStyles.textSub]}>
-                            Loading holidays...
-                        </Text>
-                    ) : holidays.filter(h => {
-                        const date = parseLocalDate(h.date);
-                        return (filterMonth === null || date.getMonth() === filterMonth) &&
-                            (filterYear === null || date.getFullYear() === filterYear);
-                    }).slice(0, 5).map((holiday, idx) => (
-                        <View key={idx} style={styles.tableRow}>
-                            <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                {new Date(holiday.date).toLocaleDateString()}
-                            </Text>
-                            <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                {holiday.title}
-                            </Text>
-                            <Text style={[styles.tableText, dynamicStyles.textMain]}>
-                                {holiday.type === 1 ? "National" : "Religious"}
-                            </Text>
+                            {/* Separator */}
+                            <View style={[styles.totalAttSeparator, { backgroundColor: colors.border, marginVertical: 12 }]} />
+
+                            {/* Row 3: Late Coming | Early Going */}
+                            <View style={styles.totalAttRow}>
+                                <View style={[styles.totalAttCell, { flex: 1 }]}>
+                                    <Text style={[styles.totalAttValue, { color: '#f97316', backgroundColor: isDark ? 'rgba(249, 115, 22, 0.1)' : '#fff7ed' }]}>
+                                        {lateComingCount}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                        <MaterialIcons name="schedule" size={12} color="#f97316" style={{ marginRight: 4 }} />
+                                        <Text style={[styles.totalAttLabel, dynamicStyles.textSub, { marginTop: 0 }]}>Late Coming</Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.totalAttDivider, { backgroundColor: colors.border }]} />
+                                <View style={[styles.totalAttCell, { flex: 1 }]}>
+                                    <Text style={[styles.totalAttValue, { color: '#06b6d4', backgroundColor: isDark ? 'rgba(6, 182, 212, 0.1)' : '#ecfeff' }]}>
+                                        {earlyGoingCount}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                        <MaterialIcons name="directions-run" size={12} color="#06b6d4" style={{ marginRight: 4 }} />
+                                        <Text style={[styles.totalAttLabel, dynamicStyles.textSub, { marginTop: 0 }]}>Early Going</Text>
+                                    </View>
+                                </View>
+                            </View>
                         </View>
-                    ))}
-                </DashboardCard>
-            </ScrollView>
 
-            <EmployeeBottomTabBar activeTab="home" />
-        </SafeAreaView>
+
+                        {/* Shift Stats – kept UI */}
+                        {/* <View style={styles.section}>
+                            <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                                    <MaterialIcons name="pie-chart" size={22} color={colors.primary} style={{ marginRight: 8 }} />
+                                    <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle, { marginBottom: 0 }]}>
+                                        Shift Stats
+                                    </Text>
+                                </View>
+
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <PieChart
+                                        data={shiftData.map(item => ({
+                                            ...item,
+                                            color: item.color,
+                                            legendFontColor: "transparent", // hide default legend text
+                                            legendFontSize: 0,
+                                        }))}
+                                        width={screenWidth / 2}
+                                        height={160}
+                                        chartConfig={{
+                                            color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                                        }}
+                                        accessor="population"
+                                        backgroundColor="transparent"
+                                        paddingLeft="20"
+                                        hasLegend={false}
+                                        absolute
+                                    />
+
+                                    {/* Custom Legend */}
+                        {/* <View style={{ flex: 1, paddingLeft: 10 }}>
+                                        {shiftData.map((item, index) => {
+                                            const total = shiftData.reduce((acc, curr) => acc + curr.population, 0);
+                                            const percentage = total > 0 ? Math.round((item.population / total) * 100) : 0;
+
+                                            const getShiftIcon = (name: string) => {
+                                                if (name === "On Time") return "timer";
+                                                if (name === "Late") return "schedule";
+                                                return "shutter-speed";
+                                            };
+
+                                            return (
+                                                <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                                                    <MaterialIcons name={getShiftIcon(item.name)} size={16} color={item.color} style={{ marginRight: 8 }} />
+                                                    <View>
+                                                        <Text style={[dynamicStyles.textMain, { fontSize: 13, fontWeight: '700' }]}>
+                                                            {percentage}%
+                                                        </Text>
+                                                        <Text style={[dynamicStyles.textSub, { fontSize: 11 }]}>
+                                                            {item.name}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+                            </View> 
+                        </View> */}
+
+                        {/* Daily Work Hours – 7-day Week Wise */}
+                        <View style={styles.section}>
+                            <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+                                <View style={styles.dailyWorkHeader}>
+                                    <View style={{ flex: 1 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <MaterialIcons name="bar-chart" size={22} color={colors.primary} style={{ marginRight: 8 }} />
+                                            <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle, { marginBottom: 0 }]}>
+                                                Weekly Work Hours
+                                            </Text>
+                                        </View>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                            <TouchableOpacity onPress={() => setChartWeekOffset(w => w - 1)}>
+                                                <MaterialIcons name="chevron-left" size={24} color={colors.textSub} />
+                                            </TouchableOpacity>
+                                            <Text style={[styles.weekRangeLabel, dynamicStyles.textSub, { marginHorizontal: 8, fontSize: 13, fontWeight: '600' }]}>
+                                                {weekRangeLabel}
+                                            </Text>
+                                            <TouchableOpacity onPress={() => setChartWeekOffset(w => w + 1)} disabled={chartWeekOffset >= 0}>
+                                                <MaterialIcons name="chevron-right" size={24} color={chartWeekOffset >= 0 ? colors.border : colors.textSub} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                        <Text style={[styles.totalHours, dynamicStyles.textMain, { fontSize: 16, fontWeight: '800' }]}>
+                                            {weekTotalHours}
+                                        </Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <MaterialIcons name="history" size={12} color={colors.textSub} style={{ marginRight: 4 }} />
+                                            <Text style={[dynamicStyles.textSub, { fontSize: 10 }]}>TOTAL HOURS</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                {/* Legend */}
+                                <View style={{ flexDirection: 'row', gap: 12, marginBottom: 15, marginTop: 10, justifyContent: 'center' }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#90CAF9' }} />
+                                        <Text style={[dynamicStyles.textSub, { fontSize: 10 }]}>Work</Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFE082' }} />
+                                        <Text style={[dynamicStyles.textSub, { fontSize: 10 }]}>Holiday</Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFAB91' }} />
+                                        <Text style={[dynamicStyles.textSub, { fontSize: 10 }]}>Absent</Text>
+                                    </View>
+                                </View>
+
+                                {/* Tooltip */}
+                                {tooltipVisible && selectedBar && (
+                                    <View style={[styles.fixedTooltip, { borderColor: colors.primary }]}>
+                                        <Text style={styles.tooltipLabel}>{selectedBar.label}</Text>
+                                        <Text style={[styles.tooltipValue, { color: colors.primary }]}>
+                                            {selectedBar.value}h
+                                        </Text>
+                                    </View>
+                                )}
+
+                                <View style={{ overflow: "hidden", minHeight: 180, justifyContent: 'center' }}>
+                                    {loadingLogs ? (
+                                        <Text style={[{ textAlign: 'center' }, dynamicStyles.textSub]}>Loading weekly data...</Text>
+                                    ) : (
+                                        <BarChart
+                                            key={`chart-week-${chartWeekOffset}`}
+                                            data={weekData}
+                                            width={totalWidth}
+                                            height={180}
+                                            barWidth={25}
+                                            spacing={14}
+                                            initialSpacing={10}
+                                            barBorderRadius={6}
+                                            labelsExtraHeight={20}
+                                            xAxisLabelsHeight={20}
+                                            overflowTop={30}
+                                            disableScroll
+                                            yAxisLabelWidth={20}
+                                            formatYLabel={formatYLabel}
+                                            xAxisLabelTextStyle={{ fontSize: 9, color: colors.textSub }}
+                                            yAxisTextStyle={{ fontSize: 8, color: colors.textSub }}
+                                            xAxisColor={isDark ? '#334155' : '#e2e8f0'}
+                                            yAxisThickness={0}
+                                            xAxisThickness={1}
+                                            rulesType="solid"
+                                            rulesColor={isDark ? '#1e293b' : '#f1f5f9'}
+                                            noOfSections={4}
+                                            isAnimated
+                                            onPress={(item: any, index: number) => showBarTooltip(item, index)}
+                                        />
+                                    )}
+                                </View>
+                            </View>
+                        </View>
+                    </ScrollView>
+
+                    <EmployeeBottomTabBar activeTab="home" />
+                </View>
+            </SafeAreaView>
+
+        </View>
     );
 }
 
-// StatCard, InfoCard, TableRow, DashboardCard, styles, createDynamicStyles remain unchanged
-// (you can copy them directly from your original file)
 
-function StatCard({ title, value, icon, dynamicStyles }: any) {
-    return (
-        <View style={[styles.statCard, dynamicStyles.card]}>
-            <MaterialIcons name={icon} size={20} color={dynamicStyles.textPrimary.color} />
-            <Text style={[styles.statValue, dynamicStyles.textMain]}>{value}</Text>
-            <Text style={[styles.statTitle, dynamicStyles.textSub]}>{title}</Text>
-        </View>
-    )
-}
-
-function InfoCard({ label, value, dynamicStyles }: any) {
-    return (
-        <View style={[styles.infoCard, dynamicStyles.card]}>
-            <Text style={[styles.infoValue, dynamicStyles.textMain]}>{value}</Text>
-            <Text style={[styles.infoLabel, dynamicStyles.textSub]}>{label}</Text>
-        </View>
-    )
-}
 
 function TableRow({ date, time, mode, dynamicStyles }: any) {
     return (
@@ -1083,34 +1158,49 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
 
-    cardRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        marginBottom: 12
-    },
 
-    statCard: {
-        flex: 1,
-        backgroundColor: "#1e293b",
-        padding: 16,
-        borderRadius: 10,
-        marginHorizontal: 4
-    },
 
-    statValue: {
-        color: "#fff",
-        fontSize: 11,
-        fontWeight: "700",
-        marginTop: 6
-    },
 
-    statTitle: {
-        color: "#94a3b8",
-        fontSize: 12
-    },
 
     section: {
         marginTop: 20
+    },
+
+    dateRangeRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+
+    dateSelector: {
+        flex: 1,
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+
+    dateSelectorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+
+    dateSelectorLabel: {
+        fontSize: 12,
+        fontWeight: '500',
+        marginBottom: 4,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+
+    dateSelectorText: {
+        fontSize: 14,
+        fontWeight: '600',
     },
 
     sectionTitle: {
@@ -1132,24 +1222,7 @@ const styles = StyleSheet.create({
         color: "#94a3b8"
     },
 
-    infoCard: {
-        flex: 1,
-        backgroundColor: "#1e293b",
-        padding: 16,
-        borderRadius: 10,
-        marginHorizontal: 4
-    },
 
-    infoValue: {
-        color: "#fff",
-        fontSize: 18,
-        fontWeight: "700"
-    },
-
-    infoLabel: {
-        color: "#94a3b8",
-        fontSize: 12
-    },
 
     tableRow: {
         flexDirection: "row",
@@ -1246,6 +1319,78 @@ const styles = StyleSheet.create({
         width: "100%",
         alignSelf: "stretch",
         overflow: "hidden",
+    },
+
+    weekRangeLabel: {
+        fontSize: 13,
+        fontWeight: "600",
+    },
+
+    // Total Attendance Section Styles
+    totalAttCard: {
+        borderRadius: 16,
+        padding: 16,
+        marginTop: 5,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    totalAttHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 20,
+    },
+    totalAttTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+    },
+    totalAttRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-around",
+        paddingVertical: 10,
+    },
+    totalAttCell: {
+        flex: 1,
+        alignItems: "center",
+    },
+    iconBox: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    totalAttValue: {
+        fontSize: 22,
+        fontWeight: "800",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        overflow: "hidden",
+        textAlign: "center",
+        minWidth: 50,
+    },
+    totalAttLabel: {
+        fontSize: 11,
+        fontWeight: "600",
+        marginTop: 8,
+        textAlign: "center",
+    },
+    totalAttDivider: {
+        width: 1,
+        height: "60%",
+        opacity: 0.2,
+    },
+    totalAttSeparator: {
+        height: 1,
+        width: "100%",
+        opacity: 0.1,
+        marginVertical: 4,
     },
 
 });

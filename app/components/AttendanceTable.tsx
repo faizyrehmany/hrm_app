@@ -96,6 +96,15 @@ export default function AttendanceScreen({ colors, isDark }: Props) {
       .padStart(2, '0')} ${ampm}`;
   };
 
+  const formatTime24 = (date: Date | string | number | undefined) => {
+    if (!date) return '';
+    const d = new Date(date);
+    return `${d.getHours().toString().padStart(2, '0')}:${d
+      .getMinutes()
+      .toString()
+      .padStart(2, '0')}`;
+  };
+
   // ─── Merge raw logs by date ────────────────────────────────────────────────
   const mergeAttendanceLogs = (logs: AttendanceLog[]) => {
     const grouped: Record<string, any> = {};
@@ -422,16 +431,26 @@ export default function AttendanceScreen({ colors, isDark }: Props) {
         </View>
 
         {/* Action - Show button when either check-in or check-out is missing */}
-        {(!hasCheckIn || !hasCheckOut) && (
-          <TouchableOpacity
-            style={[mobileStyles.requestBtn, { backgroundColor: primary }]}
-            onPress={() => submitCorrection(item)}
-            activeOpacity={0.8}
-          >
-            <MaterialIcons name="edit" size={14} color="#fff" />
-            <Text style={mobileStyles.requestBtnText}>Request Missing Time</Text>
-          </TouchableOpacity>
-        )}
+        {(() => {
+          const isToday = new Date(item.DATE).toDateString() === new Date().toDateString();
+          // Show if:
+          // 1. Check-in is missing (even for today)
+          // 2. Check-out is missing AND it is NOT today (yesterday or older)
+          const shouldShow = !hasCheckIn || (!hasCheckOut && !isToday);
+          
+          if (!shouldShow) return null;
+
+          return (
+            <TouchableOpacity
+              style={[mobileStyles.requestBtn, { backgroundColor: primary }]}
+              onPress={() => submitCorrection(item)}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="edit" size={14} color="#fff" />
+              <Text style={mobileStyles.requestBtnText}>Request Missing Time</Text>
+            </TouchableOpacity>
+          );
+        })()}
       </View>
     );
   };
@@ -710,10 +729,10 @@ export default function AttendanceScreen({ colors, isDark }: Props) {
         employeeName={selectedEmployee}
         initialDate={selectedRow ? formatDate(new Date(selectedRow.workDate)) : ''}
         initialCheckIn={
-          selectedRow && selectedRow.inOutMode === 0 ? formatTime(selectedRow.logTime) : ''
+          selectedRow && selectedRow.inOutMode === 0 ? formatTime24(selectedRow.logTime) : ''
         }
         initialCheckOut={
-          selectedRow && selectedRow.inOutMode === 1 ? formatTime(selectedRow.logTime) : ''
+          selectedRow && selectedRow.inOutMode === 1 ? formatTime24(selectedRow.logTime) : ''
         }
         submitting={submitting}
       />
@@ -778,7 +797,7 @@ const mobileStyles = StyleSheet.create({
   loadingText: { fontSize: 13 },
 
   // List
-  listContent: { padding: 12, gap: 10, paddingBottom: 24 },
+  listContent: { padding: 12, gap: 10, paddingBottom: 120 },
 
   // Card shared
   card: {

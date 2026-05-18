@@ -1,4 +1,70 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "./Config";
+
+const LAST_SENT_LOCATION_KEY = "last_sent_location";
+const LAST_SENT_TIME_KEY = "last_sent_time";
+
+export interface LocationCoords {
+    latitude: number;
+    longitude: number;
+}
+
+let memLastSentLocation: LocationCoords | null = null;
+let memLastSentTime = 0;
+
+export const getLastSentLocation = async (): Promise<LocationCoords | null> => {
+    if (memLastSentLocation) return memLastSentLocation;
+    try {
+        const value = await AsyncStorage.getItem(LAST_SENT_LOCATION_KEY);
+        if (value) {
+            memLastSentLocation = JSON.parse(value);
+            return memLastSentLocation;
+        }
+    } catch (e) {
+        console.error("Error reading last sent location:", e);
+    }
+    return null;
+};
+
+export const setLastSentLocation = async (loc: LocationCoords | null): Promise<void> => {
+    memLastSentLocation = loc;
+    try {
+        if (loc) {
+            await AsyncStorage.setItem(LAST_SENT_LOCATION_KEY, JSON.stringify(loc));
+        } else {
+            await AsyncStorage.removeItem(LAST_SENT_LOCATION_KEY);
+        }
+    } catch (e) {
+        console.error("Error setting last sent location:", e);
+    }
+};
+
+export const getLastSentTime = async (): Promise<number> => {
+    if (memLastSentTime > 0) return memLastSentTime;
+    try {
+        const value = await AsyncStorage.getItem(LAST_SENT_TIME_KEY);
+        if (value) {
+            memLastSentTime = parseInt(value, 10);
+            return memLastSentTime;
+        }
+    } catch (e) {
+        console.error("Error reading last sent time:", e);
+    }
+    return 0;
+};
+
+export const setLastSentTime = async (time: number): Promise<void> => {
+    memLastSentTime = time;
+    try {
+        if (time > 0) {
+            await AsyncStorage.setItem(LAST_SENT_TIME_KEY, time.toString());
+        } else {
+            await AsyncStorage.removeItem(LAST_SENT_TIME_KEY);
+        }
+    } catch (e) {
+        console.error("Error setting last sent time:", e);
+    }
+};
 
 export const sendLocation = async (payload: any, token: string) => {
   try {
@@ -44,4 +110,22 @@ export const getDistance = (lat1: number, lon1: number, lat2: number, lon2: numb
     Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+};
+
+export const isSameLocation = (a: LocationCoords | null, b: LocationCoords | null): boolean => {
+  if (!a || !b) return false;
+  const distance = getDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+  return distance < 15;
+};
+
+export const clearLocationCache = async (): Promise<void> => {
+    memLastSentLocation = null;
+    memLastSentTime = 0;
+    try {
+        await AsyncStorage.removeItem(LAST_SENT_LOCATION_KEY);
+        await AsyncStorage.removeItem(LAST_SENT_TIME_KEY);
+        console.log("🧹 Location cache cleared successfully!");
+    } catch (e) {
+        console.error("Error clearing location cache:", e);
+    }
 };

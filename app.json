@@ -7,13 +7,13 @@
     "icon": "./assets/icon/new_logo.png",
     "scheme": "hrmapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "permissions": [
       "location",
       "locationBackground"
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location to track employee attendance",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to track attendance in the background",

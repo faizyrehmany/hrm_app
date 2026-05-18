@@ -1,12 +1,15 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
+import AsyncStorage from "@react-native-async-storage/async-storage"; // ✅ ADDED
 import * as FileSystem from "expo-file-system/legacy"; // ✅ IMPORTANT
+import * as MediaLibrary from "expo-media-library"; // ✅ ADDED
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
     Alert,
     Linking,
+    Platform, // ✅ ADDED
     ScrollView,
     StyleSheet,
     Text,
@@ -108,14 +111,14 @@ function ExpenseCard({ item, onEdit, onDelete, onDownload, onView, isDark, color
                 <View style={styles.cardActions}>
                     <TouchableOpacity
                         style={[styles.actionBtn, { backgroundColor: colors.backgroundLight }]}
-                        onPress={() => onView(`${API_BASE_URL}${item.attachmentUrl}`)}
+                        onPress={() => onView(item.attachmentUrl)}
                     >
                         <Ionicons name="eye-outline" size={16} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.actionBtn, { backgroundColor: colors.backgroundLight }]}
                         onPress={() =>
-                            onDownload(`${API_BASE_URL}${item.attachmentUrl}`)
+                            onDownload(item.attachmentUrl)
                         }
                     >
                         <Ionicons name="download-outline" size={16} color="#A855F7" />
@@ -371,12 +374,15 @@ export default function EmployeeExpense() {
 
     const handleDownload = async (url: string) => {
         try {
-            const fileName = url.split("/").pop() || "file";
+            if (!url) return;
+            const serverBaseUrl = API_BASE_URL.replace("/api", "");
+            const fullUrl = url.startsWith("http") ? url : `${serverBaseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+            const fileName = fullUrl.split("/").pop() || "file";
             const fileUri = FileSystem.cacheDirectory + fileName;
 
-            const result = await FileSystem.downloadAsync(url, fileUri);
-
-            console.log("Downloaded:", result.uri);
+            // 1. Download to local cache
+            const result = await FileSystem.downloadAsync(fullUrl, fileUri);
+            console.log("Downloaded to cache:", result.uri);
 
             // detect file type
             const extension = fileName.split(".").pop()?.toLowerCase();
@@ -387,14 +393,123 @@ export default function EmployeeExpense() {
             else if (extension === "png") mimeType = "image/png";
             else if (extension === "jpg" || extension === "jpeg") mimeType = "image/jpeg";
 
-            await Sharing.shareAsync(result.uri, {
-                mimeType,
-                dialogTitle: "Share Attachment",
-            });
+            const isImage = extension === "png" || extension === "jpg" || extension === "jpeg";
+
+            // If it's an image, save directly to user's gallery!
+            if (isImage) {
+                const { status } = await MediaLibrary.requestPermissionsAsync();
+                if (status === 'granted') {
+                    await MediaLibrary.saveToLibraryAsync(result.uri);
+                    Alert.alert("Success", "Image downloaded directly to your Gallery / Photos!");
+                    return;
+                } else {
+                    Alert.alert("Permission Required", "Gallery permission is required to download images directly.");
+                    await Sharing.shareAsync(result.uri, { mimeType, dialogTitle: "Save Attachment" });
+                    return;
+                }
+            }
+
+            if (Platform.OS === 'android') {
+                try {
+                    let directoryUri = await AsyncStorage.getItem("SAF_DOWNLOAD_DIR");
+
+                    if (!directoryUri) {
+                        // Request user to select a public directory once (e.g., Downloads)
+                        Alert.alert(
+                            "Select Download Folder",
+                            "Please choose a folder (like Downloads) where files should be directly saved.",
+                            [
+                                {
+                                    text: "Choose Folder",
+                                    onPress: async () => {
+                                        try {
+                                            const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+                                            if (permissions.granted) {
+                                                await AsyncStorage.setItem("SAF_DOWNLOAD_DIR", permissions.directoryUri);
+                                                saveToAndroidSAF(permissions.directoryUri, result.uri, fileName, mimeType, url);
+                                            } else {
+                                                // Fallback to share sheet
+                                                await Sharing.shareAsync(result.uri, { mimeType, dialogTitle: "Save Attachment" });
+                                            }
+                                        } catch (e) {
+                                            console.log("Directory picker error:", e);
+                                            await Sharing.shareAsync(result.uri, { mimeType, dialogTitle: "Save Attachment" });
+                                        }
+                                    }
+                                },
+                                {
+                                    text: "Cancel",
+                                    style: "cancel",
+                                    onPress: async () => {
+                                        await Sharing.shareAsync(result.uri, { mimeType, dialogTitle: "Save Attachment" });
+                                    }
+                                }
+                            ]
+                        );
+                    } else {
+                        await saveToAndroidSAF(directoryUri, result.uri, fileName, mimeType, url);
+                    }
+                } catch (safErr) {
+                    console.log("SAF flow error, fallback to sharing:", safErr);
+                    await AsyncStorage.removeItem("SAF_DOWNLOAD_DIR");
+                    await Sharing.shareAsync(result.uri, { mimeType, dialogTitle: "Save Attachment" });
+                }
+            } else {
+                // iOS standard direct Save to Files option inside native Share Sheet
+                await Sharing.shareAsync(result.uri, {
+                    mimeType,
+                    dialogTitle: "Save Attachment",
+                });
+            }
 
         } catch (err) {
             console.log("Download error:", err);
-            Alert.alert("Error", "Sharing failed");
+            Alert.alert("Error", "Download failed");
+        }
+    };
+
+    // Helper helper to write downloaded file directly to Android SAF selected folder
+    const saveToAndroidSAF = async (directoryUri: string, localUri: string, fileName: string, mimeType: string, url: string) => {
+        try {
+            const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                directoryUri,
+                fileName,
+                mimeType
+            );
+
+            // Read the cached file as base64 and write it to SAF public location
+            const base64Data = await FileSystem.readAsStringAsync(localUri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+
+            await FileSystem.writeAsStringAsync(newFileUri, base64Data, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+
+            Alert.alert("Success", "File downloaded directly to your selected folder!");
+        } catch (err) {
+            console.log("Error saving file to SAF directory:", err);
+            // Stale/unwritable directory Uri - clear it from AsyncStorage
+            await AsyncStorage.removeItem("SAF_DOWNLOAD_DIR");
+
+            // Alert user of the Scoped Storage restriction and offer direct subfolder retry or fallback sharing
+            Alert.alert(
+                "Access Denied by Android",
+                "Android restricts apps from writing directly to the root 'Downloads' folder. Please select a subfolder (or create a new folder inside Downloads) to save directly.",
+                [
+                    {
+                        text: "Select Another Folder",
+                        onPress: () => handleDownload(url) // Retry with picker
+                    },
+                    {
+                        text: "Cancel / Share File",
+                        style: "cancel",
+                        onPress: async () => {
+                            await Sharing.shareAsync(localUri, { mimeType, dialogTitle: "Save Attachment" });
+                        }
+                    }
+                ]
+            );
         }
     };
 
@@ -402,7 +517,8 @@ export default function EmployeeExpense() {
         try {
             if (!url) return;
 
-            const fullUrl = `${API_BASE_URL}${url}`;
+            const serverBaseUrl = API_BASE_URL.replace("/api", "");
+            const fullUrl = url.startsWith("http") ? url : `${serverBaseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
 
             const supported = await Linking.canOpenURL(fullUrl);
 

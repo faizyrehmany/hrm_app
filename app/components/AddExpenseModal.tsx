@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import {
     ActionSheetIOS,
     Alert,
+    KeyboardAvoidingView,
     Modal,
     Platform,
     ScrollView,
@@ -268,8 +269,12 @@ export default function AddExpenseModal({
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
-            <View style={styles.overlay}>
-                <View style={styles.container}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                style={{ flex: 1 }}
+            >
+                <View style={styles.overlay}>
+                    <View style={styles.container}>
 
                     {/* HEADER */}
                     <View style={styles.header}>
@@ -448,6 +453,7 @@ export default function AddExpenseModal({
                     </ScrollView>
                 </View>
             </View>
+            </KeyboardAvoidingView>
 
             {showDate && (
                 <DateTimePicker

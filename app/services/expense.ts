@@ -49,6 +49,16 @@ export const getExpenses = async (employeeId?: string) => {
     }
 };
 
+const isLocalUri = (uri?: string): boolean => {
+    if (!uri) return false;
+    return (
+        uri.startsWith("file://") ||
+        uri.startsWith("content://") ||
+        uri.startsWith("ph://") ||
+        uri.startsWith("assets-library://")
+    );
+};
+
 export const createExpense = async (payload: any) => {
     try {
         const token = await SessionManager.getToken(); // ✅ ADD THIS
@@ -64,7 +74,7 @@ export const createExpense = async (payload: any) => {
         formData.append("vendor", payload.vendor);
         formData.append("paymentMethod", payload.paymentMethod);
 
-        if (payload.attachmentUrl) {
+        if (payload.attachmentUrl && isLocalUri(payload.attachmentUrl.uri)) {
             formData.append("attachmentUrl", {
                 uri: payload.attachmentUrl.uri,
                 name: payload.attachmentUrl.name,
@@ -113,7 +123,7 @@ export const updateExpense = async (id: number, payload: any) => {
         formData.append("vendor", payload.vendor);
         formData.append("paymentMethod", payload.paymentMethod);
 
-        if (payload.attachmentUrl) {
+        if (payload.attachmentUrl && isLocalUri(payload.attachmentUrl.uri)) {
             formData.append("attachmentUrl", {
                 uri: payload.attachmentUrl.uri,
                 name: payload.attachmentUrl.name,

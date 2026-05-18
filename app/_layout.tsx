@@ -16,6 +16,7 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: '#fff' }
           }}
         >
+          <Stack.Screen name="screens/index" options={{ headerShown: false }} />
           <Stack.Screen name="screens/apply_leave" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="screens/add_designation" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="screens/add_holiday" options={{ animation: 'slide_from_bottom' }} />

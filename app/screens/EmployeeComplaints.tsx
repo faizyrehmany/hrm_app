@@ -8,13 +8,14 @@ import {
     KeyboardAvoidingView,
     Modal,
     Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import EmployeeBottomTabBar from "../components/EmployeeBottomTabBar";
 import EmployeeHeader from "../components/EmployeeHeader";
 import SideMenu from "../components/SideMenu";
@@ -47,6 +48,7 @@ const initialComplaints: Complaint[] = [];
 
 export default function EmployeeComplaints() {
     const { isDark, colors } = useTheme();
+    const insets = useSafeAreaInsets();
 
     const STATUS_COLORS = React.useMemo(() => ({
         PENDING: {
@@ -309,92 +311,94 @@ export default function EmployeeComplaints() {
                 onRequestClose={() => setModalVisible(false)}
             >
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
                     style={styles.modalOverlay}
                 >
-                    <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: 24 + insets.bottom }]}>
                         <Text style={[styles.modalTitle, { color: colors.textMain }]}>
                             {editingId ? "Edit Complaint" : "New Complaint"}
                         </Text>
 
-                        {/* Category Selector */}
-                        <Text style={[styles.modalLabel, { color: colors.textSub }]}>CATEGORY</Text>
-                        <TouchableOpacity
-                            style={[styles.selector, { backgroundColor: colors.backgroundLight, borderColor: colors.border }]}
-                            onPress={() => setShowCategoryPicker((v) => !v)}
-                        >
-                            <Text style={[styles.selectorText, { color: colors.textMain }]}>{formCategory}</Text>
-                            <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSub} />
-                        </TouchableOpacity>
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 26 }}>
+                            {/* Category Selector */}
+                            <Text style={[styles.modalLabel, { color: colors.textSub }]}>CATEGORY</Text>
+                            <TouchableOpacity
+                                style={[styles.selector, { backgroundColor: colors.backgroundLight, borderColor: colors.border }]}
+                                onPress={() => setShowCategoryPicker((v) => !v)}
+                            >
+                                <Text style={[styles.selectorText, { color: colors.textMain }]}>{formCategory}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSub} />
+                            </TouchableOpacity>
 
-                        {showCategoryPicker && (
-                            <View style={[styles.pickerList, { backgroundColor: colors.backgroundLight, borderColor: colors.border }]}>
-                                {CATEGORIES.map((cat) => (
-                                    <TouchableOpacity
-                                        key={cat}
-                                        style={styles.pickerItem}
-                                        onPress={() => {
-                                            setFormCategory(cat);
-                                            setShowCategoryPicker(false);
-                                        }}
-                                    >
-                                        <Text
-                                            style={[
-                                                styles.pickerItemText,
-                                                { color: colors.textSub },
-                                                cat === formCategory &&
-                                                [styles.pickerItemActive, { color: colors.primary }],
-                                            ]}
+                            {showCategoryPicker && (
+                                <View style={[styles.pickerList, { backgroundColor: colors.backgroundLight, borderColor: colors.border }]}>
+                                    {CATEGORIES.map((cat) => (
+                                        <TouchableOpacity
+                                            key={cat}
+                                            style={styles.pickerItem}
+                                            onPress={() => {
+                                                setFormCategory(cat);
+                                                setShowCategoryPicker(false);
+                                            }}
                                         >
-                                            {cat}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )}
+                                            <Text
+                                                style={[
+                                                    styles.pickerItemText,
+                                                    { color: colors.textSub },
+                                                    cat === formCategory &&
+                                                    [styles.pickerItemActive, { color: colors.primary }],
+                                                ]}
+                                            >
+                                                {cat}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
 
-                        {/* Description */}
-                        <Text style={[styles.modalLabel, { color: colors.textSub }]}>DESCRIPTION</Text>
-                        <TextInput
-                            style={[styles.textArea, { backgroundColor: colors.backgroundLight, borderColor: colors.border, color: colors.textMain }]}
-                            placeholder="Describe the issue..."
-                            placeholderTextColor={colors.textSub}
-                            multiline
-                            numberOfLines={4}
-                            value={formDescription}
-                            onChangeText={setFormDescription}
-                        />
-
-                        {/* Anonymous Toggle */}
-                        <TouchableOpacity
-                            style={styles.anonymousToggle}
-                            onPress={() => setFormIsAnonymous(!formIsAnonymous)}
-                        >
-                            <MaterialIcons
-                                name={formIsAnonymous ? "check-box" : "check-box-outline-blank"}
-                                size={22}
-                                color={formIsAnonymous ? colors.primary : colors.textSub}
+                            {/* Description */}
+                            <Text style={[styles.modalLabel, { color: colors.textSub }]}>DESCRIPTION</Text>
+                            <TextInput
+                                style={[styles.textArea, { backgroundColor: colors.backgroundLight, borderColor: colors.border, color: colors.textMain }]}
+                                placeholder="Describe the issue..."
+                                placeholderTextColor={colors.textSub}
+                                multiline
+                                numberOfLines={4}
+                                value={formDescription}
+                                onChangeText={setFormDescription}
                             />
-                            <Text style={[styles.anonymousText, { color: colors.textMain }]}>Report Anonymously</Text>
-                        </TouchableOpacity>
 
-                        {/* Buttons */}
-                        <View style={styles.modalActions}>
+                            {/* Anonymous Toggle */}
                             <TouchableOpacity
-                                style={[styles.cancelBtn, { backgroundColor: colors.backgroundLight, borderColor: colors.border }]}
-                                onPress={() => setModalVisible(false)}
+                                style={styles.anonymousToggle}
+                                onPress={() => setFormIsAnonymous(!formIsAnonymous)}
                             >
-                                <Text style={[styles.cancelBtnText, { color: colors.textSub }]}>Cancel</Text>
+                                <MaterialIcons
+                                    name={formIsAnonymous ? "check-box" : "check-box-outline-blank"}
+                                    size={22}
+                                    color={formIsAnonymous ? colors.primary : colors.textSub}
+                                />
+                                <Text style={[styles.anonymousText, { color: colors.textMain }]}>Report Anonymously</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.saveBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-                                onPress={handleSave}
-                            >
-                                <Text style={styles.saveBtnText}>
-                                    {editingId ? "Update" : "Submit"}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
+
+                            {/* Buttons */}
+                            <View style={styles.modalActions}>
+                                <TouchableOpacity
+                                    style={[styles.cancelBtn, { backgroundColor: colors.backgroundLight, borderColor: colors.border }]}
+                                    onPress={() => setModalVisible(false)}
+                                >
+                                    <Text style={[styles.cancelBtnText, { color: colors.textSub }]}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.saveBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
+                                    onPress={handleSave}
+                                >
+                                    <Text style={styles.saveBtnText}>
+                                        {editingId ? "Update" : "Submit"}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
@@ -518,6 +522,7 @@ const styles = StyleSheet.create({
         padding: 24,
         paddingBottom: 36,
         borderTopWidth: 1,
+        maxHeight: "85%",
     },
     modalTitle: {
         fontSize: 18,

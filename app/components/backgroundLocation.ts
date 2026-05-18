@@ -3,15 +3,16 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 import { SessionManager } from "../services/SessionManager";
-import { getDistance, sendLocation } from "../services/location";
+import {
+    sendLocation,
+    getLastSentLocation,
+    setLastSentLocation,
+    getLastSentTime,
+    setLastSentTime,
+    isSameLocation,
+} from "../services/location";
 
 const LOCATION_TASK = "background-location-task";
-
-// ─────────────────────────────────────────────
-// STATE
-// ─────────────────────────────────────────────
-let lastSentLocation: { latitude: number; longitude: number } | null = null;
-let lastSentTime = 0;
 
 // ─────────────────────────────────────────────
 // CONFIG
@@ -19,15 +20,20 @@ let lastSentTime = 0;
 const MIN_SEND_INTERVAL = 60_000; // 1 minute
 
 // ─────────────────────────────────────────────
-// SAME LOCATION CHECK (anti spam)
+// LOCAL TIMESTAMP HELPER
 // ─────────────────────────────────────────────
-const isSameLocation = (a: any, b: any) => {
-    if (!a || !b) return false;
-
-    // Use distance-based check with 15 meter threshold
-    const distance = getDistance(a.latitude, a.longitude, b.latitude, b.longitude);
-    return distance < 15;
+/**
+ * Generates an ISO-like string representing the current local date and time.
+ * For example: "2026-05-18T13:49:04.552" (without the UTC 'Z' timezone suffix).
+ * This forces standard datetime parsers to save the exact local clock numbers in the database.
+ */
+const getLocalTimestamp = (): string => {
+    const tzoffset = (new Date()).getTimezoneOffset() * 60000; // offset in milliseconds
+    const localDate = new Date(Date.now() - tzoffset);
+    return localDate.toISOString().slice(0, -1); // remove trailing 'Z'
 };
+
+
 
 // ─────────────────────────────────────────────
 // BACKGROUND TASK
@@ -66,10 +72,11 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: any) => {
                     accuracy: 0,
                     location: false,
                     battery: 0,
-                    timestamp: new Date().toISOString(),
+                    timestamp: getLocalTimestamp(),
                 },
                 token
             );
+            await SessionManager.clearSession(); // Clear session to force logout on open
             return;
         }
 
@@ -81,15 +88,18 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: any) => {
             location: true,
             accuracy: location.coords.accuracy ?? 0,
             battery: Math.round(battery * 100),
-            timestamp: new Date().toISOString(),
+            timestamp: getLocalTimestamp(),
         };
 
         // ─────────────────────────────
         // SAME RULES AS FOREGROUND
         // ─────────────────────────────
         const now = Date.now();
-        const tooSoon = now - lastSentTime < MIN_SEND_INTERVAL;
-        const sameLocation = isSameLocation(lastSentLocation, newLoc);
+        const lastSentLoc = await getLastSentLocation();
+        const lastSentT = await getLastSentTime();
+
+        const tooSoon = now - lastSentT < MIN_SEND_INTERVAL;
+        const sameLocation = isSameLocation(lastSentLoc, newLoc);
 
         if (tooSoon || sameLocation) {
             if (sameLocation) {
@@ -102,8 +112,8 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: any) => {
 
         await sendLocation(payload, token);
 
-        lastSentLocation = newLoc;
-        lastSentTime = now;
+        await setLastSentLocation(newLoc);
+        await setLastSentTime(now);
     } catch (e) {
         console.error("❌ Background error:", e);
     }
@@ -158,7 +168,4 @@ export const stopBackgroundTracking = async () => {
     if (started) {
         await Location.stopLocationUpdatesAsync(LOCATION_TASK);
     }
-
-    lastSentLocation = null;
-    lastSentTime = 0;
 };

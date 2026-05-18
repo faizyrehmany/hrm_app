@@ -1,8 +1,16 @@
 import * as Battery from "expo-battery";
 import * as Location from "expo-location";
+import { router } from "expo-router";
 import { Alert, AppState, AppStateStatus, Linking } from "react-native";
 import { SessionManager } from "../services/SessionManager";
-import { getDistance, sendLocation } from "../services/location";
+import {
+    sendLocation,
+    getLastSentLocation,
+    setLastSentLocation,
+    setLastSentTime,
+    isSameLocation,
+} from "../services/location";
+import { stopBackgroundTracking } from "./backgroundLocation";
 
 // ─────────────────────────────────────────────
 // STATE
@@ -17,8 +25,42 @@ let sendInterval: ReturnType<typeof setInterval> | null = null;
 let lastReceivedTime = Date.now();
 let isBlockingAlertVisible = false;
 
-// 🔥 last sent location
-let lastSentLocation: { latitude: number; longitude: number } | null = null;
+// ─────────────────────────────────────────────
+// FORCE LOGOUT SECURITY RULE
+// ─────────────────────────────────────────────
+const performLogout = async () => {
+    try {
+        console.log("🔒 Security Enforcement: Logging out due to disabled location/permissions...");
+        
+        // 1. Stop all tracking services
+        stopTracking();
+        try {
+            await stopBackgroundTracking();
+        } catch (err) {
+            console.error("Error stopping background tracking on logout:", err);
+        }
+
+        // 2. Clear user session
+        await SessionManager.clearSession();
+
+        // 3. Show Popup Alert and redirect on OK
+        Alert.alert(
+            "Location Required",
+            "You have been logged out because location services are required to use this application. Please enable GPS and grant location permissions to sign back in.",
+            [
+                {
+                    text: "OK",
+                    onPress: () => {
+                        router.replace("/");
+                    }
+                }
+            ],
+            { cancelable: false }
+        );
+    } catch (e) {
+        console.error("Error executing force logout:", e);
+    }
+};
 
 // ─────────────────────────────────────────────
 // CONFIG
@@ -27,6 +69,20 @@ const WATCHDOG_TIMEOUT_MS = 120_000;
 const WATCHDOG_CHECK_INTERVAL_MS = 30_000;
 const GPS_CHECK_INTERVAL_MS = 3000;
 const LOCATION_SEND_INTERVAL = 60_000; // 1 minute
+
+// ─────────────────────────────────────────────
+// LOCAL TIMESTAMP HELPER
+// ─────────────────────────────────────────────
+/**
+ * Generates an ISO-like string representing the current local date and time.
+ * For example: "2026-05-18T13:49:04.552" (without the UTC 'Z' timezone suffix).
+ * This forces standard datetime parsers to save the exact local clock numbers in the database.
+ */
+const getLocalTimestamp = (): string => {
+    const tzoffset = (new Date()).getTimezoneOffset() * 60000; // offset in milliseconds
+    const localDate = new Date(Date.now() - tzoffset);
+    return localDate.toISOString().slice(0, -1); // remove trailing 'Z'
+};
 
 // ─────────────────────────────────────────────
 // FORCE LOCATION
@@ -62,16 +118,7 @@ const forceEnableLocation = async () => {
     );
 };
 
-// ─────────────────────────────────────────────
-// LIGHTWEIGHT SAME LOCATION CHECK
-// ─────────────────────────────────────────────
-const isSameLocation = (a: any, b: any) => {
-    if (!a || !b) return false;
 
-    // Use distance-based check with 15 meter threshold
-    const distance = getDistance(a.latitude, a.longitude, b.latitude, b.longitude);
-    return distance < 15;
-};
 
 // ─────────────────────────────────────────────
 // SEND LOCATION (1 MIN RULE)
@@ -92,8 +139,10 @@ const sendCurrentLocation = async () => {
             longitude: loc.coords.longitude,
         };
 
+        const lastSentLoc = await getLastSentLocation();
+
         // 🚫 prevent redundant updates if user hasn't moved > 15 meters
-        if (isSameLocation(lastSentLocation, newLoc)) {
+        if (isSameLocation(lastSentLoc, newLoc)) {
             console.log("📍 Location unchanged (within 15m), skipping API update");
 
             // ✅ CRITICAL: Update lastReceivedTime even when skipping
@@ -110,12 +159,13 @@ const sendCurrentLocation = async () => {
             accuracy: loc.coords.accuracy ?? 0,
             location: true,
             battery: Math.round(battery * 100),
-            timestamp: new Date().toISOString(),
+            timestamp: getLocalTimestamp(),
         };
 
         await sendLocation(payload, token);
 
-        lastSentLocation = newLoc;
+        await setLastSentLocation(newLoc);
+        await setLastSentTime(Date.now());
         lastReceivedTime = Date.now();
     } catch (e) {
         console.error(e);
@@ -139,17 +189,18 @@ const startGpsWatcher = () => {
                     const session = await SessionManager.getUser();
                     const token = await SessionManager.getToken();
                     const battery = await Battery.getBatteryLevelAsync();
+                    const lastSentLoc = await getLastSentLocation();
 
                     if (session && token) {
                         await sendLocation(
                             {
                                 employeeId: session.employeeId,
-                                latitude: lastSentLocation?.latitude ?? 0, // ✅ use last
-                                longitude: lastSentLocation?.longitude ?? 0, // ✅ use last
+                                latitude: lastSentLoc?.latitude ?? 0, // ✅ use last
+                                longitude: lastSentLoc?.longitude ?? 0, // ✅ use last
                                 accuracy: 0,
                                 location: false,
                                 battery: Math.round(battery * 100),
-                                timestamp: new Date().toISOString(),
+                                timestamp: getLocalTimestamp(),
                             },
                             token
                         );
@@ -163,7 +214,7 @@ const startGpsWatcher = () => {
                 }
             }
 
-            setTimeout(() => forceEnableLocation(), 3000);
+            await performLogout();
         } else {
             // ✅ GPS turned back ON → reset flag
             hasSentGpsOff = false;
@@ -215,8 +266,7 @@ const startAppStateListener = () => {
                     await Location.getForegroundPermissionsAsync();
 
                 if (status !== "granted") {
-                    stopTracking();
-                    forceEnableLocation();
+                    await performLogout();
                 } else if (!sendInterval) {
                     await startTracking();
                 }
@@ -240,7 +290,7 @@ export const startTracking = async () => {
         await Location.requestForegroundPermissionsAsync();
 
     if (status !== "granted") {
-        forceEnableLocation();
+        await performLogout();
         return;
     }
 
@@ -277,6 +327,5 @@ export const stopTracking = () => {
     stopAppStateListener();
     stopGpsWatcher();
 
-    lastSentLocation = null;
     lastReceivedTime = Date.now();
 };

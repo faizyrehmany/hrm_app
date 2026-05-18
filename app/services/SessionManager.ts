@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearLocationCache } from './location';
 
 export interface User {
     id: number | string;
@@ -87,6 +88,7 @@ export const SessionManager = {
         try {
             await AsyncStorage.removeItem(TOKEN_KEY);
             await AsyncStorage.removeItem(USER_KEY);
+            await clearLocationCache(); // 🧹 Clear location cache (disk & memory) on logout
         } catch (error) {
             console.error('Error clearing session:', error);
         }
